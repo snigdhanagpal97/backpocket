@@ -84,11 +84,18 @@ const payload = {
 const body = JSON.stringify(payload);
 const signature = "sha256=" + createHmac("sha256", secret).update(body, "utf8").digest("hex");
 
-const response = await fetch(url, {
-  method: "POST",
-  headers: { "Content-Type": "application/json", "X-Hub-Signature-256": signature },
-  body,
-});
+let response: Response;
+try {
+  response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Hub-Signature-256": signature },
+    body,
+  });
+} catch (error) {
+  console.error(`Could not reach ${url}. Is the server running?`);
+  console.error(error instanceof Error ? (error.cause ?? error.message) : error);
+  process.exit(1);
+}
 
 console.log(`POST ${url}`);
 console.log(`message ${messageId} (${message.type}) from ${from}`);
