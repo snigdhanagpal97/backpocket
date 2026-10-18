@@ -19,7 +19,8 @@ export const envSchema = z.object({
   ALLOWED_PHONES: digitsList,
   ANTHROPIC_API_KEY: z.string().min(1),
   OPENAI_API_KEY: z.string().min(1),
-  SUPABASE_URL: z.url(),
+  // Keep only the origin, so a pasted ".../rest/v1/" still works.
+  SUPABASE_URL: z.url().transform((value) => new URL(value).origin),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
 });
 

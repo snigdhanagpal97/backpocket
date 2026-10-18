@@ -29,7 +29,7 @@ Weekend 1 covers save and find. A calendar-matched morning brief comes next.
 | `npm run build` | Production build |
 | `npm run lint` | ESLint |
 | `npm test` | Vitest unit tests |
-| `npm run simulate` | Sends a signed fake WhatsApp webhook (added in Phase 2) |
+| `npm run simulate` | Sends a signed fake WhatsApp webhook |
 
 ## Simulator
 
