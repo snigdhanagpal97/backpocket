@@ -132,7 +132,8 @@ export type SearchItem = {
 };
 
 export const searchAnswerSchema = z.object({
-  answer: z.string().trim(),
+  // The prompt asks for about 200; anything past 280 is sent back for a shorter try.
+  answer: z.string().trim().max(280, "too long, cut it to about 200 characters"),
   used_ids: z.array(z.string().min(1)).max(3),
 });
 

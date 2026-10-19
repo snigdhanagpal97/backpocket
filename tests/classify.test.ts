@@ -80,6 +80,14 @@ describe("cleanUrl", () => {
     );
   });
 
+  it("drops LinkedIn's highlighted-update parameters", () => {
+    expect(
+      cleanUrl(
+        "https://www.linkedin.com/posts/x-share-7516180321638313985-gb0-/?highlightedUpdateUrn=urn%3Ali%3Aactivity%3A1&highlightedUpdateType=SOCIAL_SHARE&origin=SOCIAL_SHARE",
+      ),
+    ).toBe("https://www.linkedin.com/posts/x-share-7516180321638313985-gb0-/?origin=SOCIAL_SHARE");
+  });
+
   it("keeps parameters a page needs", () => {
     expect(cleanUrl("https://www.youtube.com/watch?v=abc123&si=track")).toBe("https://www.youtube.com/watch?v=abc123");
   });

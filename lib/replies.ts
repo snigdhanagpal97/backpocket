@@ -129,7 +129,7 @@ export function markDoneReply(
   if (titles.length > 0) {
     lines.push(label ? `Marked ${label}:` : "Moved back to your lists:");
     lines.push(...titles.map((title) => `- ${title}`));
-    if (label) lines.push("I'll leave them out of future lists.");
+    if (label) lines.push(`I'll leave ${titles.length === 1 ? "it" : "them"} out of future lists.`);
   }
   if (problems.badNumbers.length > 0) {
     lines.push(`The last list didn't have ${problems.badNumbers.join(", ")}.`);

@@ -18,7 +18,7 @@ export const ANSWER_TOOL: Anthropic.Beta.BetaTool = {
     properties: {
       answer: {
         type: "string",
-        description: "The answer itself, under 280 characters, plain text. Empty if no item answers the question.",
+        description: "The answer itself, about 200 characters, plain text. Empty if no item answers the question.",
       },
       used_ids: {
         type: "array",
@@ -37,8 +37,9 @@ Bad: "Aditi said your framework is good. She has some tips for growth cases and 
 Good: "Aditi liked the framework. Fixes: neater sheet, key question at the top so you can tie back to it. GBOT was solid."
 
 Rules:
-- Lead with the direct answer. No preamble, no restating the question, no "Her other notes", no sign-off.
-- Under 280 characters. At most 3 "- " bullets, only when listing distinct things.
+- Lead with the direct answer. No preamble, no restating the question, no labels like "Her feedback:" or "Her other notes:", no sign-off.
+- About 200 characters, never more than 280. At most 3 short "- " bullets, only when listing distinct things.
+- Drop context the person already knows (when they meet, what the chat was about). Keep the substance.
 - Keep names, numbers, dates and pay. Cut filler and anything that doesn't answer the question.
 - Use only what the items say. Never invent or add outside knowledge.
 - Similar is not enough. Use an item only if it actually helps answer. If none do, return an empty answer and no ids.

@@ -4,7 +4,7 @@ const URL_PATTERN = /\b(?:https?:\/\/|www\.)[^\s<>"']+/i;
 const TRAILING_PUNCTUATION = /[.,;:!?)\]}'"»”’]+$/;
 
 // Share-link parameters that only track the click (and, for rcm/mdxt, who shared it).
-const TRACKING_PARAMS = /^(utm_.+|rcm|mdxt|igsh|igshid|si|fbclid|gclid|trk|trackingid|lipi|ref_src|mibextid)$/i;
+const TRACKING_PARAMS = /^(utm_.+|rcm|mdxt|igsh|igshid|si|fbclid|gclid|trk|trackingid|lipi|ref_src|mibextid|highlightedupdate.+)$/i;
 
 /** Drops tracking parameters, so the same post saved twice is one link. */
 export function cleanUrl(url: string): string {

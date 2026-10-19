@@ -45,6 +45,12 @@ describe("markDoneReply", () => {
     );
   });
 
+  it("says it for one item", () => {
+    expect(markDoneReply("applied", ["Nordstrom"], { badNumbers: [], unmatched: [] })).toContain(
+      "I'll leave it out of future lists.",
+    );
+  });
+
   it("confirms an undo", () => {
     expect(markDoneReply(null, ["Nordstrom"], { badNumbers: [], unmatched: [] })).toBe(
       "Moved back to your lists:\n- Nordstrom",
