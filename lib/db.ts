@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { MatchedItem } from "@/lib/types";
+import type { MatchedItem, SearchItem } from "@/lib/types";
 import { env } from "@/lib/env";
 
 export const SCREENSHOT_BUCKET = "screenshots";
@@ -170,6 +170,18 @@ export async function matchItems(phone: string, embedding: number[], count: numb
   });
   if (error) throw new Error(`match_items failed: ${error.message}`);
   return (data ?? []) as MatchedItem[];
+}
+
+/** Loads the content search answers from, in the order of `ids`. */
+export async function getSearchItems(ids: string[]): Promise<SearchItem[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await db()
+    .from("items")
+    .select("id, title, summary, key_points, raw_text, url, item_type, wa_message_id")
+    .in("id", ids);
+  if (error) throw new Error(`search item lookup failed: ${error.message}`);
+  const byId = new Map((data as SearchItem[]).map((item) => [item.id, item]));
+  return ids.flatMap((id) => byId.get(id) ?? []);
 }
 
 /** Marks items as opened and logs one resurfacing per item. */

@@ -38,27 +38,27 @@ export function clampReply(text: string, max = MAX_REPLY_CHARS): string {
 export const SEARCH_FAILED = "Couldn't search just now, try again?";
 export const NOTHING_FOUND = "I couldn't find anything you saved about that.";
 
-type ReplyPick = { item: { title: string | null; url: string | null }; why: string };
+export type OutgoingMessage = { text: string; replyTo: string | null };
 
-function pickBlock(pick: ReplyPick, whyLimit: number): string {
-  const why = pick.why.length > whyLimit ? `${pick.why.slice(0, whyLimit - 1).trimEnd()}…` : pick.why;
-  return [pick.item.title ?? "Untitled", why, pick.item.url ?? ""].filter(Boolean).join("\n");
-}
+type AnswerItem = { title: string | null; url: string | null; wa_message_id: string | null };
 
 /**
- * Each pick as title, one line on why, and its link. Stays under the reply
- * limit by shortening the why lines, then dropping the last pick; links are
- * never cut, because a cut link doesn't open.
+ * The answer quotes the message you saved the best item with, and ends with
+ * its link. Other items that helped follow as short replies quoting theirs,
+ * so you can tap back to what you sent. Links are never cut.
  */
-export function searchReply(picks: ReplyPick[], max = MAX_REPLY_CHARS): string {
-  for (let count = picks.length; count > 0; count--) {
-    for (const whyLimit of [Infinity, 90, 50]) {
-      const text = picks
-        .slice(0, count)
-        .map((pick) => pickBlock(pick, whyLimit))
-        .join("\n\n");
-      if (text.length <= max) return text;
-    }
-  }
-  return clampReply(pickBlock(picks[0], 50), max);
+export function searchMessages(answer: string, items: AnswerItem[], max = MAX_REPLY_CHARS): OutgoingMessage[] {
+  const [top, ...rest] = items;
+  if (!top) return [{ text: clampReply(answer, max), replyTo: null }];
+
+  const link = top.url ? `\n\n${top.url}` : "";
+  const first = { text: clampReply(answer, max - link.length) + link, replyTo: top.wa_message_id };
+  const others = rest.map((item) => {
+    const itemLink = item.url ? `\n${item.url}` : "";
+    return {
+      text: clampReply(`Also from your saves: ${item.title ?? "this one"}`, max - itemLink.length) + itemLink,
+      replyTo: item.wa_message_id,
+    };
+  });
+  return [first, ...others];
 }

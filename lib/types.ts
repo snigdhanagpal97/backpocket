@@ -100,6 +100,8 @@ export const cardSchema = z.object({
     companies: z.array(z.string().trim().min(1)),
   }),
   topics: z.array(topic).min(2).max(5),
+  /** Text read from the image, close to verbatim. Empty when there is no image. */
+  image_text: z.string().trim().max(8000),
 });
 
 export type Card = z.infer<typeof cardSchema>;
@@ -115,10 +117,21 @@ export type MatchedItem = {
   similarity: number;
 };
 
-export const searchPicksSchema = z.object({
-  picks: z
-    .array(z.object({ id: z.string().min(1), why: z.string().trim().min(1) }))
-    .max(3),
+/** A matched item with the content search needs to answer from. */
+export type SearchItem = {
+  id: string;
+  title: string | null;
+  summary: string | null;
+  key_points: string[];
+  raw_text: string | null;
+  url: string | null;
+  item_type: string | null;
+  wa_message_id: string | null;
+};
+
+export const searchAnswerSchema = z.object({
+  answer: z.string().trim(),
+  used_ids: z.array(z.string().min(1)).max(3),
 });
 
-export type SearchPick = { item: MatchedItem; why: string };
+export type SearchAnswer = { answer: string; items: SearchItem[] };

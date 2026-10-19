@@ -9,6 +9,7 @@ const valid = {
   key_points: ["250 g paneer", "Blend the spinach"],
   entities: { people: [], companies: [] },
   topics: ["paneer", "dinner"],
+  image_text: "",
 };
 
 describe("cardSchema", () => {
@@ -38,5 +39,10 @@ describe("cardEmbeddingText", () => {
     expect(cardEmbeddingText(cardSchema.parse(valid))).toBe(
       "Palak paneer\nA spinach and paneer curry.\n250 g paneer\nBlend the spinach\npaneer dinner",
     );
+  });
+
+  it("adds text read from an image", () => {
+    const card = cardSchema.parse({ ...valid, image_text: "Aditi: framework is good" });
+    expect(cardEmbeddingText(card).endsWith("\nAditi: framework is good")).toBe(true);
   });
 });

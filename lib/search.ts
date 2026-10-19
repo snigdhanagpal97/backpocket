@@ -1,103 +1,101 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { callTool, ToolCallError } from "@/lib/claude";
-import { matchItems, recordResurfacing } from "@/lib/db";
+import { getSearchItems, matchItems, recordResurfacing } from "@/lib/db";
 import { embed } from "@/lib/embed";
-import { NOTHING_FOUND, searchReply } from "@/lib/replies";
-import { searchPicksSchema, type MatchedItem, type SearchPick } from "@/lib/types";
+import { NOTHING_FOUND, searchMessages, type OutgoingMessage } from "@/lib/replies";
+import { searchAnswerSchema, type SearchAnswer, type SearchItem } from "@/lib/types";
 
 const CANDIDATES = 5;
+const MAX_ITEM_TEXT = 1500;
 
-export const PICK_TOOL: Anthropic.Beta.BetaTool = {
-  name: "pick_items",
-  description: "Return the saved items that answer the question, best first.",
+export const ANSWER_TOOL: Anthropic.Beta.BetaTool = {
+  name: "answer_question",
+  description: "Answer the question from the saved items, and say which items the answer used.",
   input_schema: {
     type: "object",
     additionalProperties: false,
-    required: ["picks"],
+    required: ["answer", "used_ids"],
     properties: {
-      picks: {
+      answer: {
+        type: "string",
+        description: "The answer itself, under 450 characters, plain text. Empty if no item answers the question.",
+      },
+      used_ids: {
         type: "array",
-        description: "0 to 3 items. Empty if none of them answer the question.",
-        items: {
-          type: "object",
-          additionalProperties: false,
-          required: ["id", "why"],
-          properties: {
-            id: { type: "string", description: "The id of a candidate item." },
-            why: { type: "string", description: "One short line, under 90 characters, on why it fits." },
-          },
-        },
+        items: { type: "string" },
+        description: "Ids of the 0 to 3 items the answer is based on, most useful first.",
       },
     },
   },
 };
 
-const SYSTEM_PROMPT = `Someone asked a question in chat about things they saved earlier. You get their question and up to 5 saved items found by similarity search.
+const SYSTEM_PROMPT = `Someone asked a question in WhatsApp about things they saved earlier: links, screenshots, posts, notes. You get the question and up to 5 saved items found by similarity search, with their content.
 
-Pick the 1 to 3 items that actually answer the question, best first. Similar is not enough: skip items that only share a word or a theme. If none fit, return an empty list.
+Answer the question itself, from the items' content. Say what the content actually says: who said what, the steps, the numbers, the names. Bad: "A chat screenshot where Aditi gives growth case tips." Good: "Aditi said your framework is good. Her notes: keep the sheet neater, and write the key question at the top so you can keep tying back to it."
 
-For each pick, write one short line on why it fits, in plain words, speaking to the person (for example: "Uses paneer and spinach, about 35 minutes"). Use only what the item says. Never invent details.
+Rules:
+- Use only what the items say. Never invent or add outside knowledge.
+- Similar is not enough. Use an item only if it actually helps answer. If none do, return an empty answer and no ids.
+- Plain text for WhatsApp: no markdown, no headings. Short lines or "- " bullets are fine. Under 450 characters.
+- Speak to the person as "you". Don't mention items, ids, search or screenshots.
 
-Always answer by calling the pick_items tool.`;
+Always answer by calling the answer_question tool.`;
 
-function candidateText(question: string, candidates: MatchedItem[]): string {
-  const items = candidates.map((item) =>
-    [
-      `id: ${item.id}`,
-      `type: ${item.item_type ?? "unknown"}`,
-      `title: ${item.title ?? "(untitled)"}`,
-      `summary: ${item.summary ?? ""}`,
-    ].join("\n"),
-  );
-  return `Question: ${question}\n\nSaved items:\n\n${items.join("\n\n")}`;
+function itemText(item: SearchItem): string {
+  const raw = (item.raw_text ?? "").slice(0, MAX_ITEM_TEXT);
+  return [
+    `id: ${item.id}`,
+    `type: ${item.item_type ?? "unknown"}`,
+    `title: ${item.title ?? "(untitled)"}`,
+    `summary: ${item.summary ?? ""}`,
+    item.key_points.length ? `key points:\n${item.key_points.map((point) => `- ${point}`).join("\n")}` : "",
+    raw ? `saved text:\n${raw}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
-/** Asks Claude which candidates answer the question. Retries once on bad output. */
-async function pickMatches(question: string, candidates: MatchedItem[]): Promise<SearchPick[]> {
+/** Asks Claude to answer from the candidates. Retries once on bad output. */
+async function answerFromItems(question: string, candidates: SearchItem[]): Promise<SearchAnswer> {
   const byId = new Map(candidates.map((item) => [item.id, item]));
+  const prompt = `Question: ${question}\n\nSaved items:\n\n${candidates.map(itemText).join("\n\n---\n\n")}`;
   let lastProblem = "";
 
   for (let attempt = 1; attempt <= 2; attempt++) {
-    const text = candidateText(question, candidates) + (lastProblem ? `\n\nYour last answer was rejected: ${lastProblem}` : "");
     try {
       const input = await callTool({
         system: SYSTEM_PROMPT,
-        content: [{ type: "text", text }],
-        tool: PICK_TOOL,
-        maxTokens: 2000,
+        content: [{ type: "text", text: prompt + (lastProblem ? `\n\nYour last answer was rejected: ${lastProblem}` : "") }],
+        tool: ANSWER_TOOL,
+        maxTokens: 3000,
       });
-      const parsed = searchPicksSchema.safeParse(input);
+      const parsed = searchAnswerSchema.safeParse(input);
       if (parsed.success) {
-        // Keep only ids we actually offered, once each.
-        const seen = new Set<string>();
-        return parsed.data.picks.flatMap(({ id, why }) => {
-          const item = byId.get(id);
-          if (!item || seen.has(id)) return [];
-          seen.add(id);
-          return [{ item, why }];
-        });
+        const items = [...new Set(parsed.data.used_ids)].flatMap((id) => byId.get(id) ?? []);
+        return { answer: items.length ? parsed.data.answer : "", items };
       }
       lastProblem = parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ");
     } catch (error) {
       if (!(error instanceof ToolCallError)) throw error;
       lastProblem = error.message;
     }
-    console.warn("[search] pick attempt failed", { attempt, problem: lastProblem });
+    console.warn("[search] answer attempt failed", { attempt, problem: lastProblem });
   }
-  throw new Error(`search picks failed twice: ${lastProblem}`);
+  throw new Error(`search answer failed twice: ${lastProblem}`);
 }
 
-/** Answers a question from the user's saved items, as a WhatsApp reply. */
-export async function answerQuestion(phone: string, question: string): Promise<string> {
-  const candidates = await matchItems(phone, await embed(question), CANDIDATES);
-  if (candidates.length === 0) return NOTHING_FOUND;
+/** Answers a question from the user's saved items, as one or more WhatsApp messages. */
+export async function answerQuestion(phone: string, question: string): Promise<OutgoingMessage[]> {
+  const matches = await matchItems(phone, await embed(question), CANDIDATES);
+  const candidates = await getSearchItems(matches.map((match) => match.id));
+  if (candidates.length === 0) return [{ text: NOTHING_FOUND, replyTo: null }];
 
-  const picks = await pickMatches(question, candidates);
-  if (picks.length === 0) return NOTHING_FOUND;
+  const { answer, items } = await answerFromItems(question, candidates);
+  if (!answer || items.length === 0) return [{ text: NOTHING_FOUND, replyTo: null }];
 
   await recordResurfacing(
-    picks.map((pick) => pick.item.id),
+    items.map((item) => item.id),
     "search",
   );
-  return searchReply(picks);
+  return searchMessages(answer, items);
 }

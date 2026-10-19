@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alreadySavedReply, clampReply, fallbackReply, savedReply, searchReply } from "@/lib/replies";
+import { alreadySavedReply, clampReply, fallbackReply, savedReply, searchMessages } from "@/lib/replies";
 
 describe("savedReply", () => {
   it("shows the title, then type and hashtags on the next line", () => {
@@ -46,34 +46,37 @@ describe("clampReply", () => {
   });
 });
 
-describe("searchReply", () => {
-  const pick = (n: number, why = "Uses paneer and spinach") => ({
-    item: { title: `Recipe ${n}`, url: `https://example.com/recipe-${n}` },
-    why,
+describe("searchMessages", () => {
+  const item = (n: number, url: string | null = `https://example.com/${n}`) => ({
+    title: `Item ${n}`,
+    url,
+    wa_message_id: `wamid.${n}`,
   });
 
-  it("lists title, why and link for each pick", () => {
-    expect(searchReply([pick(1), pick(2)])).toBe(
-      "Recipe 1\nUses paneer and spinach\nhttps://example.com/recipe-1\n\nRecipe 2\nUses paneer and spinach\nhttps://example.com/recipe-2",
-    );
+  it("sends the answer as a reply to the top item, with its link", () => {
+    expect(searchMessages("Aditi said the framework is good.", [item(1)])).toEqual([
+      { text: "Aditi said the framework is good.\n\nhttps://example.com/1", replyTo: "wamid.1" },
+    ]);
   });
 
-  it("leaves out the link line for items without one", () => {
-    expect(searchReply([{ item: { title: "Pricing note", url: null }, why: "Your reminder" }])).toBe(
-      "Pricing note\nYour reminder",
-    );
+  it("leaves out the link when the item has none", () => {
+    expect(searchMessages("Your slide lists four types.", [item(1, null)])).toEqual([
+      { text: "Your slide lists four types.", replyTo: "wamid.1" },
+    ]);
   });
 
-  it("stays under 700 characters and keeps links whole", () => {
-    const longUrl = `https://example.com/${"a".repeat(150)}`;
-    const picks = [1, 2, 3].map((n) => ({
-      item: { title: `A fairly long saved item title number ${n}`, url: `${longUrl}${n}` },
-      why: "w".repeat(200),
-    }));
-    const reply = searchReply(picks);
-    expect(reply.length).toBeLessThanOrEqual(700);
-    for (const line of reply.split("\n").filter((l) => l.startsWith("https://"))) {
-      expect(line.length).toBe(longUrl.length + 1);
-    }
+  it("adds a short quoted reply for each other item", () => {
+    const messages = searchMessages("Answer", [item(1), item(2), item(3, null)]);
+    expect(messages.slice(1)).toEqual([
+      { text: "Also from your saves: Item 2\nhttps://example.com/2", replyTo: "wamid.2" },
+      { text: "Also from your saves: Item 3", replyTo: "wamid.3" },
+    ]);
+  });
+
+  it("keeps every message under 700 characters without cutting the link", () => {
+    const url = `https://example.com/${"a".repeat(200)}`;
+    const [first] = searchMessages("word ".repeat(300), [item(1, url)]);
+    expect(first.text.length).toBeLessThanOrEqual(700);
+    expect(first.text.endsWith(url)).toBe(true);
   });
 });

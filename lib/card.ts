@@ -10,11 +10,14 @@ export const SAVE_CARD_TOOL: Anthropic.Beta.BetaTool = {
   input_schema: {
     type: "object",
     additionalProperties: false,
-    required: ["item_type", "title", "summary", "key_points", "entities", "topics"],
+    required: ["item_type", "title", "summary", "key_points", "entities", "topics", "image_text"],
     properties: {
       item_type: { type: "string", enum: [...ITEM_TYPES] },
       title: { type: "string", description: "Short, specific title. 60 characters or fewer." },
-      summary: { type: "string", description: "One or two plain sentences on what this is. Never more than two." },
+      summary: {
+        type: "string",
+        description: "One or two plain sentences on what the content says. Never more than two.",
+      },
       key_points: {
         ...stringArray,
         description:
@@ -30,6 +33,11 @@ export const SAVE_CARD_TOOL: Anthropic.Beta.BetaTool = {
         ...stringArray,
         description: "2 to 5 lowercase tags, single words or hyphenated, e.g. paneer, weeknight-dinner.",
       },
+      image_text: {
+        type: "string",
+        description:
+          "All readable text in the image, close to verbatim, with who said what for chats. Empty string if there is no image.",
+      },
     },
   },
 };
@@ -40,7 +48,9 @@ Use only the content you are given: the page text, the image, the link and the p
 
 item_type: recipe for anything with ingredients or cooking steps, how_to for instructions or tips, post for social posts and articles, note for the person's own thoughts, other for everything else.
 
-The summary is one or two sentences, never more.
+The summary is one or two sentences, never more. Write about what the content says, not about the medium or the format. Bad: "Screenshot of a chat where Aditi gives feedback on a framework." Good: "Aditi said the framework is good, the sheet should be neater, and the key question belongs at the top." Key points carry the actual statements, attributed to the person who made them when that's clear.
+
+For an image, also copy its readable text into image_text, close to verbatim. For chats, keep who said what.
 
 If the person wrote a note, it tells you why they saved it. Let it shape the title and topics, but don't present it as part of the source.
 

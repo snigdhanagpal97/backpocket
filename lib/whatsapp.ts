@@ -13,18 +13,37 @@ async function failure(what: string, response: Response): Promise<Error> {
   return new Error(`${what} failed: ${response.status} ${body.slice(0, 500)}`);
 }
 
-export async function sendText(to: string, body: string): Promise<void> {
-  const response = await fetch(`${GRAPH_URL}/${env().WHATSAPP_PHONE_NUMBER_ID}/messages`, {
+async function postText(to: string, body: string, replyTo?: string): Promise<Response> {
+  return fetch(`${GRAPH_URL}/${env().WHATSAPP_PHONE_NUMBER_ID}/messages`, {
     method: "POST",
     headers: { ...authHeaders(), "Content-Type": "application/json" },
     body: JSON.stringify({
       messaging_product: "whatsapp",
       recipient_type: "individual",
       to,
+      // Shows as a reply quoting that earlier message in the chat.
+      ...(replyTo ? { context: { message_id: replyTo } } : {}),
       type: "text",
       text: { preview_url: true, body },
     }),
   });
+}
+
+/**
+ * Sends a text message. With `replyTo`, it quotes that earlier message; if
+ * WhatsApp won't quote it (too old, deleted), the text is sent without the quote.
+ */
+export async function sendText(to: string, body: string, options: { replyTo?: string | null } = {}): Promise<void> {
+  const replyTo = options.replyTo ?? undefined;
+  let response = await postText(to, body, replyTo);
+  if (!response.ok && replyTo) {
+    console.warn("[whatsapp] quoted reply failed, sending without quote", {
+      replyTo,
+      status: response.status,
+      body: (await response.text().catch(() => "")).slice(0, 300),
+    });
+    response = await postText(to, body);
+  }
   if (!response.ok) throw await failure("sendText", response);
 }
 

@@ -39,7 +39,9 @@ export async function handleMessage(message: WhatsAppMessage): Promise<void> {
 
     if (extracted.source === "query") {
       isQuestion = true;
-      await sendText(phone, await answerQuestion(phone, extracted.rawText));
+      for (const reply of await answerQuestion(phone, extracted.rawText)) {
+        await sendText(phone, reply.text, { replyTo: reply.replyTo });
+      }
       return;
     }
 
@@ -77,7 +79,7 @@ export async function handleMessage(message: WhatsAppMessage): Promise<void> {
       user_phone: phone,
       source: extracted.source,
       url: extracted.url,
-      raw_text: extracted.rawText,
+      raw_text: withImageText(extracted.rawText, card),
       image_path: extracted.imagePath ?? null,
       status: "complete",
       wa_message_id: message.id,
@@ -111,6 +113,11 @@ async function cardFields(card: Card) {
   };
 }
 
+/** Keeps the text read from a screenshot with the item, so search can answer from it. */
+function withImageText(rawText: string, card: Card): string {
+  return [rawText, card.image_text ? `Text in image:\n${card.image_text}` : ""].filter(Boolean).join("\n\n");
+}
+
 function findDuplicate(phone: string, extracted: ExtractedContent): Promise<ItemRow | null> {
   if (extracted.url) return findSameContent(phone, { url: extracted.url });
   if (extracted.source === "note") return findSameContent(phone, { note: extracted.rawText });
@@ -133,7 +140,7 @@ async function attachScreenshot(pending: ItemRow, screenshot: ExtractedContent):
     card = await buildCard(combined);
     await updateItem(pending.id, {
       ...(await cardFields(card)),
-      raw_text: combined.rawText,
+      raw_text: withImageText(combined.rawText, card),
       image_path: screenshot.imagePath ?? null,
       status: "complete",
     });
