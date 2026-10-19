@@ -119,19 +119,23 @@ export async function findSameContent(
   return data as ItemRow | null;
 }
 
-/** The newest needs_fallback item from this user created after `since`. */
+/**
+ * The walled link a screenshot should complete: this user's most recent item,
+ * if it was created after `since` and is still needs_fallback. Anything saved
+ * in between means the screenshot is something new.
+ */
 export async function findPendingFallback(phone: string, since: Date): Promise<ItemRow | null> {
   const { data, error } = await db()
     .from("items")
     .select(ITEM_COLUMNS)
     .eq("user_phone", phone)
-    .eq("status", "needs_fallback")
     .gte("created_at", since.toISOString())
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error) throw new Error(`fallback lookup failed: ${error.message}`);
-  return data as ItemRow | null;
+  const latest = data as ItemRow | null;
+  return latest?.status === "needs_fallback" ? latest : null;
 }
 
 // ---------- search ----------
