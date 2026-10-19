@@ -7,14 +7,27 @@ export const MAX_REPLY_CHARS = 700;
 export const SAVE_FAILED = "Couldn't save that one, try again?";
 export const UNSUPPORTED = "I can save links, screenshots and text for now.";
 
-export function savedReply(card: Pick<Card, "title" | "item_type" | "topics">): string {
-  const type = card.item_type.replace(/_/g, "-");
-  const tags = card.topics.map((topic) => `#${topic}`).join(" ");
-  return `Saved: ${card.title}\n${type} · ${tags}`;
+export const SAVED_REPLIES = [
+  "Got it 🙂",
+  "Saved 🙂",
+  "Tucked away 🙂",
+  "In your back pocket 🙂",
+  "Got it, it's safe with me 🙂",
+] as const;
+
+/** Picks the same warm reply for the same title, so it varies across saves but is testable. */
+function pick<T>(options: readonly T[], seed: string): T {
+  let hash = 0;
+  for (const char of seed) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return options[hash % options.length];
 }
 
-export function alreadySavedReply(title: string | null): string {
-  return title ? `Already saved: ${title}` : "Already saved that one.";
+export function savedReply(card: Pick<Card, "title">): string {
+  return pick(SAVED_REPLIES, card.title);
+}
+
+export function alreadySavedReply(): string {
+  return "Already have that one 🙂";
 }
 
 const PLATFORM_NAMES: Partial<Record<Source, string>> = {

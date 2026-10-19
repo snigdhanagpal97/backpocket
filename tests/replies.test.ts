@@ -1,15 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { alreadySavedReply, clampReply, fallbackReply, savedReply, searchMessages } from "@/lib/replies";
+import { alreadySavedReply, clampReply, fallbackReply, SAVED_REPLIES, savedReply, searchMessages } from "@/lib/replies";
 
 describe("savedReply", () => {
-  it("shows the title, then type and hashtags on the next line", () => {
-    expect(
-      savedReply({ title: "Palak paneer", item_type: "recipe", topics: ["paneer", "weeknight-dinner"] }),
-    ).toBe("Saved: Palak paneer\nrecipe · #paneer #weeknight-dinner");
+  it("is a short warm line, not the card details", () => {
+    const reply = savedReply({ title: "Palak paneer" });
+    expect(SAVED_REPLIES).toContain(reply);
+    expect(reply).not.toContain("Palak");
   });
 
-  it("writes how_to as how-to", () => {
-    expect(savedReply({ title: "T", item_type: "how_to", topics: ["a", "b"] })).toContain("how-to ·");
+  it("is the same for the same title and varies across titles", () => {
+    expect(savedReply({ title: "A" })).toBe(savedReply({ title: "A" }));
+    const replies = new Set(["A", "B", "C", "D", "E", "F", "G", "H"].map((title) => savedReply({ title })));
+    expect(replies.size).toBeGreaterThan(1);
   });
 });
 
@@ -27,9 +29,8 @@ describe("fallbackReply", () => {
 });
 
 describe("alreadySavedReply", () => {
-  it("uses the title when there is one", () => {
-    expect(alreadySavedReply("Palak paneer")).toBe("Already saved: Palak paneer");
-    expect(alreadySavedReply(null)).toBe("Already saved that one.");
+  it("is warm and short", () => {
+    expect(alreadySavedReply()).toBe("Already have that one 🙂");
   });
 });
 
