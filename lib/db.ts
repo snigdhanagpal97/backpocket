@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { MatchedItem } from "@/lib/types";
 import { env } from "@/lib/env";
 
 export const SCREENSHOT_BUCKET = "screenshots";
@@ -131,4 +132,28 @@ export async function findPendingFallback(phone: string, since: Date): Promise<I
     .maybeSingle();
   if (error) throw new Error(`fallback lookup failed: ${error.message}`);
   return data as ItemRow | null;
+}
+
+// ---------- search ----------
+
+export async function matchItems(phone: string, embedding: number[], count: number): Promise<MatchedItem[]> {
+  const { data, error } = await db().rpc("match_items", {
+    query_embedding: toVector(embedding),
+    match_count: count,
+    phone,
+  });
+  if (error) throw new Error(`match_items failed: ${error.message}`);
+  return (data ?? []) as MatchedItem[];
+}
+
+/** Marks items as opened and logs one resurfacing per item. */
+export async function recordResurfacing(itemIds: string[], trigger: string): Promise<void> {
+  if (itemIds.length === 0) return;
+  const now = new Date().toISOString();
+  const [opened, logged] = await Promise.all([
+    db().from("items").update({ last_opened_at: now }).in("id", itemIds),
+    db().from("resurfacings").insert(itemIds.map((item_id) => ({ item_id, trigger, sent_at: now }))),
+  ]);
+  if (opened.error) throw new Error(`last_opened_at update failed: ${opened.error.message}`);
+  if (logged.error) throw new Error(`resurfacings insert failed: ${logged.error.message}`);
 }

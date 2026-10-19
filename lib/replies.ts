@@ -34,3 +34,31 @@ export function clampReply(text: string, max = MAX_REPLY_CHARS): string {
   const cut = text.slice(0, max - 1);
   return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), max - 40)).trimEnd()}…`;
 }
+
+export const SEARCH_FAILED = "Couldn't search just now, try again?";
+export const NOTHING_FOUND = "I couldn't find anything you saved about that.";
+
+type ReplyPick = { item: { title: string | null; url: string | null }; why: string };
+
+function pickBlock(pick: ReplyPick, whyLimit: number): string {
+  const why = pick.why.length > whyLimit ? `${pick.why.slice(0, whyLimit - 1).trimEnd()}…` : pick.why;
+  return [pick.item.title ?? "Untitled", why, pick.item.url ?? ""].filter(Boolean).join("\n");
+}
+
+/**
+ * Each pick as title, one line on why, and its link. Stays under the reply
+ * limit by shortening the why lines, then dropping the last pick; links are
+ * never cut, because a cut link doesn't open.
+ */
+export function searchReply(picks: ReplyPick[], max = MAX_REPLY_CHARS): string {
+  for (let count = picks.length; count > 0; count--) {
+    for (const whyLimit of [Infinity, 90, 50]) {
+      const text = picks
+        .slice(0, count)
+        .map((pick) => pickBlock(pick, whyLimit))
+        .join("\n\n");
+      if (text.length <= max) return text;
+    }
+  }
+  return clampReply(pickBlock(picks[0], 50), max);
+}

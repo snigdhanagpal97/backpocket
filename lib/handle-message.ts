@@ -9,7 +9,15 @@ import {
 } from "@/lib/db";
 import { cardEmbeddingText, embed } from "@/lib/embed";
 import { extractContent, UnsupportedMessageError } from "@/lib/extract";
-import { alreadySavedReply, fallbackReply, SAVE_FAILED, savedReply, UNSUPPORTED } from "@/lib/replies";
+import {
+  alreadySavedReply,
+  fallbackReply,
+  SAVE_FAILED,
+  savedReply,
+  SEARCH_FAILED,
+  UNSUPPORTED,
+} from "@/lib/replies";
+import { answerQuestion } from "@/lib/search";
 import type { Card, ExtractedContent, Source, WhatsAppMessage } from "@/lib/types";
 import { sendText } from "@/lib/whatsapp";
 
@@ -17,6 +25,7 @@ const FALLBACK_WINDOW_MS = 10 * 60 * 1000;
 
 export async function handleMessage(message: WhatsAppMessage): Promise<void> {
   const phone = message.from;
+  let isQuestion = false;
   try {
     // Meta retries webhooks; the same message id must never be saved twice.
     if (await messageAlreadySaved(message.id, `${phone}/${message.id}`)) {
@@ -27,7 +36,8 @@ export async function handleMessage(message: WhatsAppMessage): Promise<void> {
     const extracted = await extractContent(message);
 
     if (extracted.source === "query") {
-      await sendText(phone, "Search is coming soon. For now I can save things.");
+      isQuestion = true;
+      await sendText(phone, await answerQuestion(phone, extracted.rawText));
       return;
     }
 
@@ -79,9 +89,10 @@ export async function handleMessage(message: WhatsAppMessage): Promise<void> {
     console.error("[handle-message] failed", {
       messageId: message.id,
       type: message.type,
+      isQuestion,
       error: error instanceof Error ? error.message : error,
     });
-    await sendText(phone, SAVE_FAILED);
+    await sendText(phone, isQuestion ? SEARCH_FAILED : SAVE_FAILED);
   }
 }
 

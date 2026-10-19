@@ -103,3 +103,22 @@ export const cardSchema = z.object({
 });
 
 export type Card = z.infer<typeof cardSchema>;
+
+// Search: what match_items returns, and Claude's pick of the ones that answer.
+
+export type MatchedItem = {
+  id: string;
+  title: string | null;
+  summary: string | null;
+  url: string | null;
+  item_type: string | null;
+  similarity: number;
+};
+
+export const searchPicksSchema = z.object({
+  picks: z
+    .array(z.object({ id: z.string().min(1), why: z.string().trim().min(1) }))
+    .max(3),
+});
+
+export type SearchPick = { item: MatchedItem; why: string };
