@@ -73,3 +73,9 @@ export function linkedInEmbedUrl(url: string): string | null {
   if (!match) return null;
   return `https://www.linkedin.com/embed/feed/update/urn:li:${match[1]}:${match[2]}`;
 }
+
+/** A short reply with no link, like "hi" or "show me", that carries nothing to save. */
+export function isBareReply(text: string): boolean {
+  const trimmed = text.trim();
+  return trimmed.length <= 25 && !URL_PATTERN.test(trimmed);
+}

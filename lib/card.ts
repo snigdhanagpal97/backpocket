@@ -10,7 +10,7 @@ export const SAVE_CARD_TOOL: Anthropic.Beta.BetaTool = {
   input_schema: {
     type: "object",
     additionalProperties: false,
-    required: ["item_type", "title", "summary", "key_points", "entities", "topics", "image_text"],
+    required: ["item_type", "title", "summary", "key_points", "entities", "topics", "image_text", "job"],
     properties: {
       item_type: { type: "string", enum: [...ITEM_TYPES] },
       title: { type: "string", description: "Short, specific title. 60 characters or fewer." },
@@ -38,6 +38,20 @@ export const SAVE_CARD_TOOL: Anthropic.Beta.BetaTool = {
         description:
           "All readable text in the image, close to verbatim, with who said what for chats. Empty string if there is no image.",
       },
+      job: {
+        type: "object",
+        additionalProperties: false,
+        required: ["company", "role", "deadline"],
+        description: "Only for item_type job. Empty strings for everything else.",
+        properties: {
+          company: { type: "string", description: "The hiring company, as its name would appear in a confirmation email." },
+          role: { type: "string", description: 'The role, like "Product Management Intern, Summer 2027".' },
+          deadline: {
+            type: "string",
+            description: "Application deadline as YYYY-MM-DD, only if the content states one. Otherwise empty.",
+          },
+        },
+      },
     },
   },
 };
@@ -46,7 +60,9 @@ const SYSTEM_PROMPT = `You turn something a person saved (a web page, a social p
 
 Use only the content you are given: the page text, the image, the link and the person's own note. Never invent details. Do not add ingredients, steps, numbers, names or claims that are not in the content. If the content is thin, keep the card short and leave key_points empty rather than guessing.
 
-item_type: recipe for anything with ingredients or cooking steps, how_to for instructions or tips, post for social posts and articles, note for the person's own thoughts, other for everything else.
+item_type: recipe for anything with ingredients or cooking steps, how_to for instructions or tips, job for a posting of a specific open job or internship someone could apply to (including a social post announcing one), post for other social posts and articles, note for the person's own thoughts, other for everything else. A post with career advice or about a company in general is a post, not a job.
+
+For a job, fill job with the company, the role and the deadline if one is stated. Resolve a deadline without a year using today's date. Leave job fields empty for every other type.
 
 The summary is one or two sentences and at most 30 words: the point of the content, with the specifics that matter (names, numbers, dates, pay). Write about what the content says, not about the medium or the format. Bad: "Screenshot of a chat where Aditi gives feedback on a framework." Good: "Aditi said the framework is good, the sheet should be neater, and the key question belongs at the top." Key points carry the actual statements, attributed to the person who made them when that's clear.
 
@@ -69,6 +85,7 @@ function contentBlocks(extracted: ExtractedContent): Anthropic.Beta.BetaContentB
     });
   }
   const lines = [
+    `Today: ${new Date().toISOString().slice(0, 10)}`,
     `Source: ${extracted.source}`,
     extracted.url ? `Link: ${extracted.url}` : "",
     extracted.rawText ? `Content:\n${extracted.rawText}` : "Content: (none besides the image)",

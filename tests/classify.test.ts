@@ -119,3 +119,16 @@ describe("linkedInEmbedUrl", () => {
     expect(linkedInEmbedUrl("https://www.linkedin.com/in/someone/")).toBeNull();
   });
 });
+
+import { isBareReply } from "@/lib/classify";
+
+describe("isBareReply", () => {
+  it.each([
+    ["hi", true],
+    ["show me", true],
+    ["https://x.com/a", false],
+    ["Ask Priya about the pricing deck on Friday", false],
+  ])("%s -> %s", (text, expected) => {
+    expect(isBareReply(text)).toBe(expected);
+  });
+});

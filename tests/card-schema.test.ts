@@ -10,6 +10,7 @@ const valid = {
   entities: { people: [], companies: [] },
   topics: ["paneer", "dinner"],
   image_text: "",
+  job: { company: "", role: "", deadline: "" },
 };
 
 describe("cardSchema", () => {
@@ -29,6 +30,7 @@ describe("cardSchema", () => {
     ["more than 5 topics", { topics: ["a", "b", "c", "d", "e", "f"] }],
     ["an unknown item type", { item_type: "video" }],
     ["missing entities", { entities: undefined }],
+    ["a deadline that is not a date", { job: { company: "Stripe", role: "PM Intern", deadline: "Nov 1" } }],
   ])("rejects %s", (_, change) => {
     expect(cardSchema.safeParse({ ...valid, ...change }).success).toBe(false);
   });

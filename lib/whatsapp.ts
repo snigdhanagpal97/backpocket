@@ -8,9 +8,35 @@ function authHeaders() {
   return { Authorization: `Bearer ${env().WHATSAPP_TOKEN}` };
 }
 
-async function failure(what: string, response: Response): Promise<Error> {
-  const body = await response.text().catch(() => "");
-  return new Error(`${what} failed: ${response.status} ${body.slice(0, 500)}`);
+/** A Graph API error, with Meta's error code when the body has one. */
+export class WhatsAppError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly code: number | null,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * Meta's code for a free-form message sent more than 24 hours after the
+ * user's last message. Only an approved template can go out then.
+ */
+export const OUTSIDE_WINDOW_CODE = 131047;
+
+export function errorCode(body: string): number | null {
+  try {
+    const code = (JSON.parse(body) as { error?: { code?: unknown } }).error?.code;
+    return typeof code === "number" ? code : null;
+  } catch {
+    return null;
+  }
+}
+
+async function failure(what: string, response: Response, body?: string): Promise<WhatsAppError> {
+  const text = body ?? (await response.text().catch(() => ""));
+  return new WhatsAppError(`${what} failed: ${response.status} ${text.slice(0, 500)}`, response.status, errorCode(text));
 }
 
 async function postText(to: string, body: string, replyTo?: string): Promise<Response> {
@@ -37,14 +63,32 @@ export async function sendText(to: string, body: string, options: { replyTo?: st
   const replyTo = options.replyTo ?? undefined;
   let response = await postText(to, body, replyTo);
   if (!response.ok && replyTo) {
+    const errorBody = await response.text().catch(() => "");
+    // Outside the 24-hour window nothing free-form gets through, quoted or not.
+    if (errorCode(errorBody) === OUTSIDE_WINDOW_CODE) throw await failure("sendText", response, errorBody);
     console.warn("[whatsapp] quoted reply failed, sending without quote", {
       replyTo,
       status: response.status,
-      body: (await response.text().catch(() => "")).slice(0, 300),
+      body: errorBody.slice(0, 300),
     });
     response = await postText(to, body);
   }
   if (!response.ok) throw await failure("sendText", response);
+}
+
+/** Sends an approved template with no variables, like the "your brief is ready" nudge. */
+export async function sendTemplate(to: string, name: string, language: string): Promise<void> {
+  const response = await fetch(`${GRAPH_URL}/${env().WHATSAPP_PHONE_NUMBER_ID}/messages`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to,
+      type: "template",
+      template: { name, language: { code: language } },
+    }),
+  });
+  if (!response.ok) throw await failure(`sendTemplate ${name}`, response);
 }
 
 const mediaInfoSchema = z.object({

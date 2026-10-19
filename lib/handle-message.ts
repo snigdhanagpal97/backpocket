@@ -1,4 +1,6 @@
+import { deliverPendingBrief } from "@/lib/brief";
 import { buildCard } from "@/lib/card";
+import { isBareReply } from "@/lib/classify";
 import {
   claimFallback,
   findPendingFallback,
@@ -14,6 +16,7 @@ import { extractContent, UnsupportedMessageError } from "@/lib/extract";
 import {
   alreadySavedReply,
   fallbackReply,
+  NO_PENDING_BRIEF,
   SAVE_FAILED,
   savedReply,
   SEARCH_FAILED,
@@ -36,6 +39,18 @@ export async function handleMessage(message: WhatsAppMessage): Promise<void> {
       console.info("[handle-message] skipping already saved message", { messageId: message.id });
       return;
     }
+
+    // A brief held back by WhatsApp's 24-hour window goes out as soon as they write.
+    const briefDelivered = await deliverPendingBrief(phone).catch((error) => {
+      console.error("[handle-message] pending brief failed", { error: error instanceof Error ? error.message : error });
+      return false;
+    });
+    if (message.type === "button") {
+      if (!briefDelivered) await sendText(phone, NO_PENDING_BRIEF);
+      return;
+    }
+    // "hi" or "show me" sent just to get the brief isn't something to save.
+    if (briefDelivered && message.type === "text" && isBareReply(message.text?.body ?? "")) return;
 
     let extracted = await extractContent(message);
 
@@ -123,7 +138,17 @@ async function cardFields(card: Card) {
     key_points: card.key_points,
     entities: card.entities,
     topics: card.topics,
+    ...jobFields(card),
     embedding: await embed(cardEmbeddingText(card)),
+  };
+}
+
+function jobFields(card: Card) {
+  const isJob = card.item_type === "job";
+  return {
+    job_company: isJob ? card.job.company || null : null,
+    job_role: isJob ? card.job.role || null : null,
+    job_deadline: isJob ? card.job.deadline || null : null,
   };
 }
 

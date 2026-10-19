@@ -9,6 +9,8 @@ export const whatsappMessageSchema = z.object({
   timestamp: z.string(),
   type: z.string(),
   text: z.object({ body: z.string() }).optional(),
+  // Tapping a quick-reply button on a template message.
+  button: z.object({ text: z.string(), payload: z.string().optional() }).optional(),
   image: z
     .object({
       id: z.string(),
@@ -83,7 +85,7 @@ export type ExtractedContent = {
 // Card built by Claude from extracted content. Constraints are enforced here,
 // because strict tool schemas can't express string lengths.
 
-export const ITEM_TYPES = ["recipe", "post", "how_to", "note", "other"] as const;
+export const ITEM_TYPES = ["recipe", "post", "how_to", "job", "note", "other"] as const;
 
 const topic = z
   .string()
@@ -102,6 +104,12 @@ export const cardSchema = z.object({
   topics: z.array(topic).min(2).max(5),
   /** Text read from the image, close to verbatim. Empty when there is no image. */
   image_text: z.string().trim().max(8000),
+  /** For job and internship posts. Empty strings otherwise. */
+  job: z.object({
+    company: z.string().trim().max(80),
+    role: z.string().trim().max(120),
+    deadline: z.string().trim().regex(/^(\d{4}-\d{2}-\d{2})?$/, "deadline is YYYY-MM-DD or empty"),
+  }),
 });
 
 export type Card = z.infer<typeof cardSchema>;
@@ -157,4 +165,104 @@ export type Intent = z.infer<typeof intentSchema>;
 export const listSelectionSchema = z.object({
   heading: z.string().trim().max(80),
   ids: z.array(z.string().min(1)),
+});
+
+// ---------- morning brief ----------
+
+const isoDateTime = z.string().refine((value) => !Number.isNaN(Date.parse(value)), "not a date");
+
+export const calendarEventSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().trim().max(300),
+  start: isoDateTime,
+  end: isoDateTime,
+  all_day: z.boolean(),
+  description: z.string().max(4000).default(""),
+  location: z.string().max(500).default(""),
+  attendees: z
+    .array(z.object({ name: z.string().max(200).default(""), email: z.string().max(320).default("") }))
+    .max(100)
+    .default([]),
+  calendar: z.enum(["google", "outlook"]).default("google"),
+});
+
+export type CalendarEvent = z.infer<typeof calendarEventSchema>;
+
+/** An email that looks like a job application confirmation. Only metadata and a snippet. */
+export const applicationEmailSchema = z.object({
+  id: z.string().min(1),
+  from: z.string().max(400),
+  subject: z.string().max(500),
+  date: isoDateTime,
+  snippet: z.string().max(1000).default(""),
+});
+
+export type ApplicationEmail = z.infer<typeof applicationEmailSchema>;
+
+/** What the Apps Script bridge sends each morning. */
+export const briefRequestSchema = z.object({
+  phone: z.string().transform((value) => value.replace(/\D/g, "")).pipe(z.string().min(6)),
+  /** The user's local date, YYYY-MM-DD. */
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  timezone: z.string().min(1).refine((tz) => {
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: tz });
+      return true;
+    } catch {
+      return false;
+    }
+  }, "unknown time zone"),
+  events: z.array(calendarEventSchema).max(80).default([]),
+  emails: z.array(applicationEmailSchema).max(60).default([]),
+  /** Published Outlook calendar (ICS). Fetched by the server. */
+  outlook_ics_url: z.url().optional().or(z.literal("").transform(() => undefined)),
+  /** Send even if today's brief already went out. For testing. */
+  force: z.boolean().default(false),
+  /** Build the brief and return it without sending or changing anything. */
+  dry_run: z.boolean().default(false),
+});
+
+export type BriefRequest = z.infer<typeof briefRequestSchema>;
+
+/** A saved job post still waiting for an application. */
+export type OpenJob = {
+  id: string;
+  title: string | null;
+  url: string | null;
+  job_company: string | null;
+  job_role: string | null;
+  job_deadline: string | null;
+  created_at: string;
+  last_reminded_at: string | null;
+};
+
+export const applicationMatchSchema = z.object({
+  matches: z.array(z.object({ item_id: z.string().min(1), email_id: z.string().min(1) })),
+});
+
+export const prepPickSchema = z.object({
+  events: z.array(
+    z.object({
+      event_id: z.string().min(1),
+      items: z
+        .array(
+          z.object({
+            item_id: z.string().min(1),
+            note: z.string().trim().max(120, "keep each note under 100 characters"),
+          }),
+        )
+        .max(3),
+    }),
+  ),
+});
+
+export const jobCheckSchema = z.object({
+  jobs: z.array(
+    z.object({
+      item_id: z.string().min(1),
+      company: z.string().trim().max(80),
+      role: z.string().trim().max(120),
+      deadline: z.string().trim().regex(/^(\d{4}-\d{2}-\d{2})?$/),
+    }),
+  ),
 });

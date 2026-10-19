@@ -25,3 +25,16 @@ describe("parseEnv", () => {
     expect(() => parseEnv({ ...valid, OPENAI_API_KEY: undefined })).toThrow(/OPENAI_API_KEY \(missing\)/);
   });
 });
+
+describe("parseEnv brief settings", () => {
+  it("treats blank brief settings as not set", () => {
+    const parsed = parseEnv({ ...valid, BRIDGE_SECRET: "", WHATSAPP_BRIEF_TEMPLATE: "", WHATSAPP_BRIEF_TEMPLATE_LANG: "" });
+    expect(parsed.BRIDGE_SECRET).toBeUndefined();
+    expect(parsed.WHATSAPP_BRIEF_TEMPLATE).toBeUndefined();
+    expect(parsed.WHATSAPP_BRIEF_TEMPLATE_LANG).toBe("en");
+  });
+
+  it("rejects a short bridge secret", () => {
+    expect(() => parseEnv({ ...valid, BRIDGE_SECRET: "short" })).toThrow(/BRIDGE_SECRET/);
+  });
+});

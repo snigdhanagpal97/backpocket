@@ -44,7 +44,7 @@ kind:
 - note: something to remember. A statement, reminder, idea or fact the person is telling the bot. "Ask Priya about the pricing deck Friday."
 - question: they want a specific answer from what they saved. "What did Aditi say about growth cases?"
 - list: they want several or all saved items that fit something. "Share all summer 2027 internship links", "which companies have I saved", "list my paneer recipes".
-- mark_done: they say they acted on items from the last list. "Applied to 1 and 3", "done with Nordstrom", "2".
+- mark_done: they say they acted on items from the last list. "Applied to 1 and 3", "done with Nordstrom", "2". Deciding not to act counts too: "skip 2", "not applying to Stripe", "not interested in 3" are mark_done with done_label "skipped".
 - unmark_done: they take that back. "I didn't apply to 2 after all."
 
 A request is never a note, even without a question mark: "can you share…", "send me…", "show…", "give me…" are question or list.

@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { MatchedItem, SearchItem } from "@/lib/types";
+import type { MatchedItem, OpenJob, SearchItem } from "@/lib/types";
 import { env } from "@/lib/env";
 
 export const SCREENSHOT_BUCKET = "screenshots";
@@ -53,6 +53,9 @@ export type NewItem = {
   key_points?: string[];
   entities?: { people: string[]; companies: string[] };
   topics?: string[];
+  job_company?: string | null;
+  job_role?: string | null;
+  job_deadline?: string | null;
   embedding?: number[] | null;
   status: string;
   wa_message_id: string;
@@ -221,15 +224,136 @@ export async function saveLastList(phone: string, itemIds: string[]): Promise<vo
   if (error) throw new Error(`chat_state save failed: ${error.message}`);
 }
 
-/** Marks items done with a label like "applied", or clears that with label null. */
-export async function setDone(phone: string, itemIds: string[], label: string | null): Promise<string[]> {
+/**
+ * Marks items done with a label like "applied", or clears that with label null.
+ * `source` says who decided: the user replying with numbers, or a confirmation email.
+ */
+export async function setDone(
+  phone: string,
+  itemIds: string[],
+  label: string | null,
+  options: { source?: "user" | "email"; at?: Date } = {},
+): Promise<string[]> {
+  const changes = label
+    ? { done_at: (options.at ?? new Date()).toISOString(), done_label: label, done_source: options.source ?? "user" }
+    : { done_at: null, done_label: null, done_source: null };
   const { data, error } = await db()
     .from("items")
-    .update(label ? { done_at: new Date().toISOString(), done_label: label } : { done_at: null, done_label: null })
+    .update(changes)
     .eq("user_phone", phone)
     .in("id", itemIds)
     .select("id, title");
   if (error) throw new Error(`done update failed: ${error.message}`);
   const titles = new Map((data ?? []).map((row) => [row.id as string, (row.title as string | null) ?? "Untitled"]));
   return itemIds.flatMap((id) => titles.get(id) ?? []);
+}
+
+// ---------- morning brief ----------
+
+/** Saved job posts with no application yet, newest first. */
+export async function openJobs(phone: string, since: Date): Promise<OpenJob[]> {
+  const { data, error } = await db()
+    .from("items")
+    .select("id, title, url, job_company, job_role, job_deadline, created_at, last_reminded_at")
+    .eq("user_phone", phone)
+    .eq("item_type", "job")
+    .eq("status", "complete")
+    .is("done_at", null)
+    .gte("created_at", since.toISOString())
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error) throw new Error(`open jobs lookup failed: ${error.message}`);
+  return (data ?? []) as OpenJob[];
+}
+
+export async function markReminded(itemIds: string[]): Promise<void> {
+  if (itemIds.length === 0) return;
+  const { error } = await db().from("items").update({ last_reminded_at: new Date().toISOString() }).in("id", itemIds);
+  if (error) throw new Error(`last_reminded_at update failed: ${error.message}`);
+}
+
+export type BriefState = { lastBriefDate: string | null };
+
+export async function getBriefState(phone: string): Promise<BriefState> {
+  const { data, error } = await db().from("chat_state").select("last_brief_date").eq("user_phone", phone).maybeSingle();
+  if (error) throw new Error(`brief state lookup failed: ${error.message}`);
+  return { lastBriefDate: (data?.last_brief_date as string | null) ?? null };
+}
+
+export async function setBriefSent(phone: string, date: string): Promise<void> {
+  const { error } = await db()
+    .from("chat_state")
+    .upsert({ user_phone: phone, last_brief_date: date, updated_at: new Date().toISOString() });
+  if (error) throw new Error(`brief date save failed: ${error.message}`);
+}
+
+/** Holds a brief WhatsApp wouldn't deliver, until the user next writes. */
+export async function savePendingBrief(phone: string, texts: string[]): Promise<void> {
+  const now = new Date().toISOString();
+  const { error } = await db()
+    .from("chat_state")
+    .upsert({ user_phone: phone, pending_brief: texts, pending_brief_at: now, updated_at: now });
+  if (error) throw new Error(`pending brief save failed: ${error.message}`);
+}
+
+/**
+ * Takes the held brief, if any and not older than `maxAgeMs`. Only one caller
+ * gets it: the clear is conditional on the timestamp that was read.
+ */
+export async function takePendingBrief(phone: string, maxAgeMs: number): Promise<string[] | null> {
+  const { data, error } = await db()
+    .from("chat_state")
+    .select("pending_brief, pending_brief_at")
+    .eq("user_phone", phone)
+    .maybeSingle();
+  if (error) throw new Error(`pending brief lookup failed: ${error.message}`);
+  if (!data?.pending_brief || !data.pending_brief_at) return null;
+
+  const { data: cleared, error: clearError } = await db()
+    .from("chat_state")
+    .update({ pending_brief: null, pending_brief_at: null })
+    .eq("user_phone", phone)
+    .eq("pending_brief_at", data.pending_brief_at)
+    .select("user_phone");
+  if (clearError) throw new Error(`pending brief clear failed: ${clearError.message}`);
+  if ((cleared ?? []).length === 0) return null;
+
+  const age = Date.now() - new Date(data.pending_brief_at as string).getTime();
+  return age <= maxAgeMs && Array.isArray(data.pending_brief) ? (data.pending_brief as string[]) : null;
+}
+
+/** Items saved before job detection existed, for the one-off backfill. */
+export async function itemsToCheckForJobs(
+  phone: string,
+  afterId: string | null,
+  limit: number,
+): Promise<{ id: string; title: string | null; summary: string | null; raw_text: string | null; created_at: string }[]> {
+  let query = db()
+    .from("items")
+    .select("id, title, summary, raw_text, created_at")
+    .eq("user_phone", phone)
+    .eq("status", "complete")
+    .in("item_type", ["post", "other", "how_to", "note"])
+    .order("id", { ascending: true })
+    .limit(limit);
+  if (afterId) query = query.gt("id", afterId);
+  const { data, error } = await query;
+  if (error) throw new Error(`backfill lookup failed: ${error.message}`);
+  return data ?? [];
+}
+
+export async function setJobFields(
+  id: string,
+  job: { company: string; role: string; deadline: string },
+): Promise<void> {
+  const { error } = await db()
+    .from("items")
+    .update({
+      item_type: "job",
+      job_company: job.company || null,
+      job_role: job.role || null,
+      job_deadline: job.deadline || null,
+    })
+    .eq("id", id);
+  if (error) throw new Error(`job fields update for ${id} failed: ${error.message}`);
 }

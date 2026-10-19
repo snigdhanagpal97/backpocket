@@ -84,7 +84,7 @@ export const NO_LIST_YET = "Ask me for a list first, then reply with its numbers
 type ListEntry = { title: string | null; url: string | null; done_label: string | null };
 
 /** Splits blocks into messages under the limit, keeping each block whole. */
-function packMessages(blocks: string[], max: number): string[] {
+export function packMessages(blocks: string[], max: number): string[] {
   const messages: string[] = [];
   let current = "";
   for (const block of blocks) {
@@ -151,4 +151,101 @@ export function markDoneReply(
     lines.push(`I couldn't find ${problems.unmatched.join(", ")} in the last list. Ask for the list again and reply with numbers.`);
   }
   return clampReply(lines.join("\n") || NO_LIST_YET);
+}
+
+// ---------- morning brief ----------
+
+export const NO_PENDING_BRIEF = "Nothing waiting right now. Your next brief comes tomorrow morning.";
+
+export type BriefPrep = {
+  start: string;
+  title: string;
+  items: { id: string; title: string | null; url: string | null; note: string }[];
+};
+
+export type BriefReminder = {
+  title: string | null;
+  url: string | null;
+  job_company: string | null;
+  job_role: string | null;
+  job_deadline: string | null;
+  created_at: string;
+};
+
+export type BriefInput = {
+  today: string;
+  timeZone: string;
+  prep: BriefPrep[];
+  reminders: BriefReminder[];
+  /** Jobs just marked applied from a confirmation email. */
+  applied: { title: string | null; job_company: string | null }[];
+};
+
+function timeOf(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit" }).format(new Date(iso));
+}
+
+function joinNames(names: string[]): string {
+  if (names.length <= 1) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/** "PM Intern, Nordstrom" without repeating the company if the role already names it. */
+export function jobLabel(job: Pick<BriefReminder, "title" | "job_company" | "job_role">): string {
+  const role = job.job_role || job.title || "Untitled";
+  const company = job.job_company;
+  return company && !role.toLowerCase().includes(company.toLowerCase()) ? `${role}, ${company}` : role;
+}
+
+/** "closes today", "closes Fri", "closes Nov 14", or how long ago it was saved. */
+export function jobTiming(job: Pick<BriefReminder, "job_deadline" | "created_at">, today: string): string {
+  const dayMs = 24 * 60 * 60 * 1000;
+  if (job.job_deadline) {
+    const days = Math.round((Date.parse(`${job.job_deadline}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / dayMs);
+    const date = new Date(`${job.job_deadline}T12:00:00Z`);
+    if (days <= 0) return "closes today";
+    if (days === 1) return "closes tomorrow";
+    if (days < 7) return `closes ${new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(date)}`;
+    return `closes ${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(date)}`;
+  }
+  // Calendar days, the way people count "saved 3 days ago".
+  const saved = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${job.created_at.slice(0, 10)}T00:00:00Z`)) / dayMs);
+  return saved >= 2 ? `saved ${saved} days ago` : saved === 1 ? "saved yesterday" : "saved today";
+}
+
+/**
+ * The morning brief: applications found in email, then prep for today's
+ * meetings, then posts still waiting for an application (numbered, so a reply
+ * of "1, 3" marks them). Empty when there's nothing worth a message.
+ */
+export function briefMessages(input: BriefInput, max = MAX_REPLY_CHARS): OutgoingMessage[] {
+  const blocks: string[] = [];
+
+  if (input.applied.length > 0) {
+    const names = input.applied.map((job) => job.job_company || job.title || "one post");
+    blocks.push(`Saw your application email for ${joinNames(names)}, so I marked ${input.applied.length === 1 ? "it" : "them"} applied.`);
+  }
+
+  const prep = input.prep.filter((event) => event.items.length > 0);
+  if (prep.length > 0) {
+    blocks.push("For today:");
+    for (const event of prep) {
+      const lines = [`${timeOf(event.start, input.timeZone)} ${event.title}`];
+      for (const item of event.items) {
+        lines.push(`- ${item.note || item.title || "Something you saved"}${item.url ? `\n${item.url}` : ""}`);
+      }
+      blocks.push(lines.join("\n"));
+    }
+  }
+
+  if (input.reminders.length > 0) {
+    blocks.push("Still to apply:");
+    input.reminders.forEach((job, i) => {
+      blocks.push(`${i + 1}. ${jobLabel(job)} (${jobTiming(job, input.today)})${job.url ? `\n${job.url}` : ""}`);
+    });
+    blocks.push('Applied to any? Reply with the numbers, like 1, 2. Not going for one? Say "skip 2".');
+  }
+
+  if (blocks.length === 0) return [];
+  return packMessages(blocks, max).map((text) => ({ text, replyTo: null }));
 }

@@ -13,8 +13,9 @@ So Backpocket lives where the saving habit already is. You share to it like any 
 - **Save:** links (LinkedIn, recipe sites, articles), screenshots and plain notes become searchable cards.
 - **Find:** "what did Aditi say about growth cases?" gets a short answer that quotes the original message you saved.
 - **Lists:** "share all summer 2027 internship links" returns a numbered list; reply with numbers to mark them applied, cooked or read, and they drop out of future lists.
+- **Morning brief:** at 6am, one message with what to read before today's meetings, the job posts you saved but haven't applied to, and any applications it found in your email. Quiet days get nothing. Setup is in [bridge/README.md](bridge/README.md).
 
-Not built yet: the calendar-matched morning brief (in progress) and Notability notes.
+Not built yet: Notability notes, and reading application emails in a UNC Outlook inbox.
 
 ## Product decisions
 
@@ -25,6 +26,9 @@ Not built yet: the calendar-matched morning brief (in progress) and Notability n
 | Claude decides what a link-free message means, with a keyword check as backup | Keyword rules only | "Done with Nordstrom" or just "2" only makes sense next to the last list sent, which keyword rules can't see. The backup keeps the bot answering when the model call fails. |
 | Answers capped near 200 characters | Full summaries | Early answers restated everything in the saved item. A reply should read like a friend who read it for you. |
 | Strip tracking parameters before saving links | Store links as shared | The same LinkedIn post shared twice had different URLs, so duplicates slipped through. |
+| Calendar and inbox read by an Apps Script in my own Google account | "Sign in with Google" | Google requires a paid security assessment for inbox access, and without it the login expires every 7 days. The script keeps the inbox inside Google and sends only confirmation-email metadata. It doesn't scale past a handful of users, which is fine for now. |
+| No brief on quiet days | A daily message no matter what | A brief that's empty half the time teaches you to ignore it. |
+| Remind about a saved job at most every 3 days, sooner near its deadline | Every unapplied post, every morning | Nagging is how reminders get muted. |
 
 ## How I built it
 
@@ -38,11 +42,12 @@ I wrote the spec and the rules in [CLAUDE.md](CLAUDE.md) and built with Claude C
 - **Claude** (`claude-sonnet-5-5`) turns the extracted content into a card using a strict tool schema, and picks the best matches when you search.
 - **OpenAI** `text-embedding-3-small` embeds each card for semantic search.
 - **Supabase** stores cards in Postgres with pgvector (`items`, `resurfacings`, `match_items()`), and screenshots in a private Storage bucket.
+- **Morning brief** (`lib/brief.ts`): a Google Apps Script (`bridge/`) posts today's events and confirmation emails to `POST /api/brief`, signed with `BRIDGE_SECRET`. The server adds the published Outlook calendar if there is one, matches emails to saved job posts with Claude, embeds each meeting to find related saves, asks Claude which ones genuinely help, and sends one message. If WhatsApp's 24-hour window has closed, the brief waits in `chat_state` until the user writes.
 
 ## Setup
 
 1. Install Node 20 or newer, then run `npm install`.
-2. Create a Supabase project. In the SQL editor, run `supabase/migrations/001_init.sql`.
+2. Create a Supabase project. In the SQL editor, run the files in `supabase/migrations/` in order.
 3. In Supabase Storage, create a **private** bucket named `screenshots`.
 4. Copy `.env.example` to `.env.local` and fill in every value. The app names any missing variable when it starts.
 5. Run `npm run dev` and open http://localhost:3000/api/health. You should see `{"ok":true}`.
@@ -56,6 +61,8 @@ I wrote the spec and the rules in [CLAUDE.md](CLAUDE.md) and built with Claude C
 | `npm run lint` | ESLint |
 | `npm test` | Vitest unit tests |
 | `npm run simulate` | Sends a signed fake WhatsApp webhook |
+| `npm run simulate-brief` | Builds the morning brief for a sample day (add `--send` to send it) |
+| `npm run backfill-jobs` | Finds job posts among items saved before job detection |
 
 ## Simulator
 
