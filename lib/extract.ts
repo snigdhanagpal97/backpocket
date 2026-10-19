@@ -1,4 +1,4 @@
-import { classifyUrl, isQuestion, splitLinkAndNote, type LinkPlatform } from "@/lib/classify";
+import { classifyUrl, isQuestion, linkedInEmbedUrl, splitLinkAndNote, type LinkPlatform } from "@/lib/classify";
 import { uploadScreenshot } from "@/lib/db";
 import { pageToText, parsePage, usefulTextLength, type ParsedPage } from "@/lib/parse-html";
 import type { ExtractedContent, WhatsAppMessage } from "@/lib/types";
@@ -86,24 +86,40 @@ async function fetchPage(url: string): Promise<FetchedPage | { error: string }> 
   }
 }
 
-export async function extractLink(url: string, note: string | null): Promise<ExtractedContent> {
-  const platform: LinkPlatform = classifyUrl(url);
+type ReadPage = { page: ParsedPage; text: string; finalPlatform: LinkPlatform };
+
+async function readPage(url: string, platform: LinkPlatform): Promise<ReadPage | { error: string }> {
   const fetched = await fetchPage(url);
-
-  if ("error" in fetched) {
-    console.warn("[extract] could not read link", { url, reason: fetched.error });
-    return linkResult(url, note, platform === "web" ? "web" : platform, "", "needs_fallback");
-  }
-
+  if ("error" in fetched) return fetched;
   // A short link (lnkd.in) can land on linkedin.com, so classify the final URL too.
   const finalPlatform = platform === "web" ? classifyUrl(fetched.finalUrl) : platform;
-  const page: ParsedPage = parsePage(fetched.html, fetched.finalUrl);
-  const text = pageToText(page, { includeBody: finalPlatform === "web" });
+  const page = parsePage(fetched.html, fetched.finalUrl);
+  return { page, text: pageToText(page, { includeBody: finalPlatform === "web" }), finalPlatform };
+}
 
+function isEnough(read: ReadPage): boolean {
+  return !read.page.isLoginWall && usefulTextLength(read.text) >= MIN_USEFUL_CHARS;
+}
+
+export async function extractLink(url: string, note: string | null): Promise<ExtractedContent> {
+  const platform: LinkPlatform = classifyUrl(url);
+  let read = await readPage(url, platform);
+
+  // LinkedIn's public embed page often shows a post that the post page hides behind sign-up.
+  const embedUrl = platform === "linkedin" ? linkedInEmbedUrl(url) : null;
+  if (embedUrl && ("error" in read || !isEnough(read))) {
+    const embed = await readPage(embedUrl, "linkedin");
+    if (!("error" in embed) && isEnough(embed)) read = embed;
+  }
+
+  if ("error" in read) {
+    console.warn("[extract] could not read link", { url, reason: read.error });
+    return linkResult(url, note, platform, "", "needs_fallback");
+  }
+
+  const { page, text, finalPlatform } = read;
   const source = finalPlatform === "web" ? (page.recipe ? "recipe_web" : "web") : finalPlatform;
-  const enough = !page.isLoginWall && usefulTextLength(text) >= MIN_USEFUL_CHARS;
-
-  return linkResult(url, note, source, text, enough ? "complete" : "needs_fallback");
+  return linkResult(url, note, source, text, isEnough(read) ? "complete" : "needs_fallback");
 }
 
 function linkResult(

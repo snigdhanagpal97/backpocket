@@ -17,6 +17,8 @@ export type ParsedPage = {
   recipe: Recipe | null;
   /** Readable paragraph text from the page body, capped. */
   bodyText: string;
+  /** The full text of a LinkedIn post, which og:description cuts short. */
+  postText: string | null;
   isLoginWall: boolean;
 };
 
@@ -149,6 +151,14 @@ export function looksLikeLoginWall(input: {
 
 // ---------- Page ----------
 
+function readLinkedInPostText($: cheerio.CheerioAPI): string | null {
+  // The post itself, on both the public post page and the embed page. Comments share the class but not the test id.
+  const post = $('[data-test-id^="main-feed-activity-"][data-test-id$="__commentary"]').first();
+  // LinkedIn double-encodes ampersands, so one decode leaves "amp;" behind.
+  const text = post.length ? post.text().replace(/&amp;|\bamp;/g, "&") : "";
+  return orNull(text.replace(/[ \t]+/g, " ").replace(/\n\s*\n\s*/g, "\n\n").trim());
+}
+
 function readBodyText($: cheerio.CheerioAPI): string {
   $("script, style, noscript, nav, header, footer, aside, form").remove();
   const container = $("article").first().length
@@ -179,8 +189,11 @@ export function parsePage(html: string, finalUrl: string): ParsedPage {
     pageKey: meta('meta[name="pageKey"]'),
   });
 
+  const postText = isLoginWall ? null : readLinkedInPostText($);
+
   return {
     title,
+    postText,
     ogTitle: meta('meta[property="og:title"]'),
     ogDescription: meta('meta[property="og:description"]'),
     description: meta('meta[name="description"]'),
@@ -206,8 +219,13 @@ export function pageToText(page: ParsedPage, options: { includeBody: boolean }):
   };
 
   add("Title", page.ogTitle ?? page.title);
-  add("Description", page.ogDescription);
-  add("Description", page.description);
+  if (page.postText) {
+    // The description is a truncated copy of the post; the full text replaces it.
+    sections.push(`Post text:\n${page.postText}`);
+  } else {
+    add("Description", page.ogDescription);
+    add("Description", page.description);
+  }
   if (page.recipe) sections.push(recipeToText(page.recipe));
   if (options.includeBody && page.bodyText) sections.push(`Page text:\n${page.bodyText}`);
 
@@ -217,7 +235,7 @@ export function pageToText(page: ParsedPage, options: { includeBody: boolean }):
 /** Length of the readable content, ignoring our own section labels. */
 export function usefulTextLength(text: string): number {
   return text
-    .replace(/^(Title|Description|Page text|Recipe|Ingredients|Instructions):\s*/gim, "")
+    .replace(/^(Title|Description|Page text|Post text|Recipe|Ingredients|Instructions):\s*/gim, "")
     .replace(/\s+/g, " ")
     .trim().length;
 }

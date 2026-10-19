@@ -114,3 +114,19 @@ describe("usefulTextLength", () => {
     expect(usefulTextLength("Title: Instagram")).toBe("Instagram".length);
   });
 });
+
+describe("LinkedIn public post", () => {
+  const page = parsePage(fixture("linkedin-public-post.html"), "https://www.linkedin.com/posts/sam_pricing-activity-1");
+
+  it("reads the full post text and skips comments", () => {
+    expect(page.postText).toContain('3. Every feature row should answer "why pay more?"');
+    expect(page.postText).toContain("before & after with Example Co folks.");
+    expect(page.postText).not.toContain("saving this");
+  });
+
+  it("uses the full post instead of the truncated description", () => {
+    const text = pageToText(page, { includeBody: false });
+    expect(text).toContain("Post text:\nThree things I learned");
+    expect(text).not.toContain("Description:");
+  });
+});

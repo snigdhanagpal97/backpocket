@@ -3,14 +3,27 @@
 const URL_PATTERN = /\b(?:https?:\/\/|www\.)[^\s<>"']+/i;
 const TRAILING_PUNCTUATION = /[.,;:!?)\]}'"»”’]+$/;
 
-/** First link in the text, with trailing punctuation removed and a scheme added if missing. */
+// Share-link parameters that only track the click (and, for rcm/mdxt, who shared it).
+const TRACKING_PARAMS = /^(utm_.+|rcm|mdxt|igsh|igshid|si|fbclid|gclid|trk|trackingid|lipi|ref_src|mibextid)$/i;
+
+/** Drops tracking parameters, so the same post saved twice is one link. */
+export function cleanUrl(url: string): string {
+  const parsed = new URL(url);
+  for (const key of [...parsed.searchParams.keys()]) {
+    if (TRACKING_PARAMS.test(key)) parsed.searchParams.delete(key);
+  }
+  parsed.hash = "";
+  return parsed.toString();
+}
+
+/** First link in the text, cleaned, with trailing punctuation removed and a scheme added if missing. */
 export function findUrl(text: string): string | null {
   const match = text.match(URL_PATTERN);
   if (!match) return null;
   const raw = match[0].replace(TRAILING_PUNCTUATION, "");
   const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
   try {
-    return new URL(withScheme).toString();
+    return cleanUrl(withScheme);
   } catch {
     return null;
   }
@@ -49,4 +62,14 @@ const QUESTION_STARTERS = /^(find|what|where|show|which|how|do i have|any)\b/i;
 export function isQuestion(text: string): boolean {
   const trimmed = text.trim();
   return trimmed.endsWith("?") || QUESTION_STARTERS.test(trimmed);
+}
+
+/**
+ * LinkedIn's public embed page for a post, built from the activity id in a
+ * /posts/...-activity-123 or /feed/update/urn:li:activity:123 link.
+ */
+export function linkedInEmbedUrl(url: string): string | null {
+  const match = url.match(/urn:li:(activity|share|ugcPost):(\d{10,})/) ?? url.match(/-(activity)-(\d{10,})/);
+  if (!match) return null;
+  return `https://www.linkedin.com/embed/feed/update/urn:li:${match[1]}:${match[2]}`;
 }

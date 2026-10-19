@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyUrl, findUrl, isQuestion, splitLinkAndNote } from "@/lib/classify";
+import { classifyUrl, cleanUrl, findUrl, isQuestion, linkedInEmbedUrl, splitLinkAndNote } from "@/lib/classify";
 
 describe("findUrl", () => {
   it("finds an https link inside text", () => {
@@ -66,4 +66,48 @@ describe("isQuestion", () => {
       expect(isQuestion(text)).toBe(false);
     },
   );
+});
+
+describe("cleanUrl", () => {
+  it("drops share tracking, including who shared it", () => {
+    expect(
+      cleanUrl(
+        "https://www.linkedin.com/posts/someone_topic-activity-7515954543143059456-FKDJ?utm_medium=ios_app&rcm=ACoAAabc&utm_source=social_share&utm_campaign=copy_link",
+      ),
+    ).toBe("https://www.linkedin.com/posts/someone_topic-activity-7515954543143059456-FKDJ");
+    expect(cleanUrl("https://www.instagram.com/reel/Dep9jgqxRXP/?mdxt=MTU3Ng==&igsh=abc")).toBe(
+      "https://www.instagram.com/reel/Dep9jgqxRXP/",
+    );
+  });
+
+  it("keeps parameters a page needs", () => {
+    expect(cleanUrl("https://www.youtube.com/watch?v=abc123&si=track")).toBe("https://www.youtube.com/watch?v=abc123");
+  });
+
+  it("is applied when finding a link in a message", () => {
+    expect(findUrl("look https://example.com/a?utm_source=x&id=7")).toBe("https://example.com/a?id=7");
+  });
+});
+
+describe("linkedInEmbedUrl", () => {
+  it.each([
+    [
+      "https://www.linkedin.com/posts/someone_topic-activity-7515954543143059456-FKDJ",
+      "https://www.linkedin.com/embed/feed/update/urn:li:activity:7515954543143059456",
+    ],
+    [
+      "https://www.linkedin.com/feed/update/urn:li:activity:7515954543143059456/",
+      "https://www.linkedin.com/embed/feed/update/urn:li:activity:7515954543143059456",
+    ],
+    [
+      "https://www.linkedin.com/feed/update/urn:li:ugcPost:7515954543143059456",
+      "https://www.linkedin.com/embed/feed/update/urn:li:ugcPost:7515954543143059456",
+    ],
+  ])("builds the embed URL for %s", (url, expected) => {
+    expect(linkedInEmbedUrl(url)).toBe(expected);
+  });
+
+  it("returns null for links without a post id", () => {
+    expect(linkedInEmbedUrl("https://www.linkedin.com/in/someone/")).toBeNull();
+  });
 });
