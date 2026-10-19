@@ -19,6 +19,8 @@ import {
   SEARCH_FAILED,
   UNSUPPORTED,
 } from "@/lib/replies";
+import { routeMessage } from "@/lib/intent";
+import { listSaved, markFromList, recentListTitles } from "@/lib/list";
 import { answerQuestion } from "@/lib/search";
 import type { Card, ExtractedContent, Source, WhatsAppMessage } from "@/lib/types";
 import { sendText } from "@/lib/whatsapp";
@@ -35,14 +37,26 @@ export async function handleMessage(message: WhatsAppMessage): Promise<void> {
       return;
     }
 
-    const extracted = await extractContent(message);
+    let extracted = await extractContent(message);
 
-    if (extracted.source === "query") {
-      isQuestion = true;
-      for (const reply of await answerQuestion(phone, extracted.rawText)) {
-        await sendText(phone, reply.text, { replyTo: reply.replyTo });
+    // Text without a link: Claude decides whether it's a note, a question, a list request or "I applied to 2".
+    if (extracted.source === "note" || extracted.source === "query") {
+      const lastList = await recentListTitles(phone);
+      const intent = await routeMessage(extracted.rawText, lastList.titles);
+      if (intent.kind !== "note") {
+        isQuestion = true;
+        if (intent.kind === "mark_done" || intent.kind === "unmark_done") {
+          await sendText(phone, await markFromList(phone, intent, lastList));
+          return;
+        }
+        const replies =
+          intent.kind === "list"
+            ? await listSaved(phone, intent, extracted.rawText)
+            : await answerQuestion(phone, intent.search_text || extracted.rawText, extracted.rawText);
+        for (const reply of replies) await sendText(phone, reply.text, { replyTo: reply.replyTo });
+        return;
       }
-      return;
+      extracted = { ...extracted, source: "note" };
     }
 
     if (extracted.source === "screenshot") {

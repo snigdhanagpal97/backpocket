@@ -16,7 +16,7 @@ export const SAVE_CARD_TOOL: Anthropic.Beta.BetaTool = {
       title: { type: "string", description: "Short, specific title. 60 characters or fewer." },
       summary: {
         type: "string",
-        description: "One or two plain sentences on what the content says. Never more than two.",
+        description: "What the content says, in one or two sentences and at most 30 words.",
       },
       key_points: {
         ...stringArray,
@@ -48,7 +48,7 @@ Use only the content you are given: the page text, the image, the link and the p
 
 item_type: recipe for anything with ingredients or cooking steps, how_to for instructions or tips, post for social posts and articles, note for the person's own thoughts, other for everything else.
 
-The summary is one or two sentences, never more. Write about what the content says, not about the medium or the format. Bad: "Screenshot of a chat where Aditi gives feedback on a framework." Good: "Aditi said the framework is good, the sheet should be neater, and the key question belongs at the top." Key points carry the actual statements, attributed to the person who made them when that's clear.
+The summary is one or two sentences and at most 30 words: the point of the content, with the specifics that matter (names, numbers, dates, pay). Write about what the content says, not about the medium or the format. Bad: "Screenshot of a chat where Aditi gives feedback on a framework." Good: "Aditi said the framework is good, the sheet should be neater, and the key question belongs at the top." Key points carry the actual statements, attributed to the person who made them when that's clear.
 
 For an image, also copy its readable text into image_text, close to verbatim. For chats, keep who said what.
 

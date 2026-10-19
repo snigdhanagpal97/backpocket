@@ -62,3 +62,80 @@ export function searchMessages(answer: string, items: AnswerItem[], max = MAX_RE
   });
   return [first, ...others];
 }
+
+// ---------- lists ----------
+
+export const NOTHING_TO_LIST = "Nothing you saved matches that.";
+export const NO_LIST_YET = "Ask me for a list first, then reply with its numbers.";
+
+type ListEntry = { title: string | null; url: string | null; done_label: string | null };
+
+/** Splits blocks into messages under the limit, keeping each block whole. */
+function packMessages(blocks: string[], max: number): string[] {
+  const messages: string[] = [];
+  let current = "";
+  for (const block of blocks) {
+    const piece = clampReply(block, max);
+    if (current && current.length + 2 + piece.length > max) {
+      messages.push(current);
+      current = piece;
+    } else {
+      current = current ? `${current}\n\n${piece}` : piece;
+    }
+  }
+  if (current) messages.push(current);
+  return messages;
+}
+
+/**
+ * A numbered list of saved items, then a prompt to reply with the numbers
+ * they acted on. Long lists continue across messages; numbering never restarts.
+ */
+export function listMessages(
+  heading: string,
+  entries: ListEntry[],
+  hidden: { count: number; label: string } | null,
+  max = MAX_REPLY_CHARS,
+): OutgoingMessage[] {
+  const blocks = [heading || "Here's what you saved:"];
+  entries.forEach((entry, i) => {
+    const done = entry.done_label ? ` (${entry.done_label})` : "";
+    blocks.push(`${i + 1}. ${entry.title ?? "Untitled"}${done}${entry.url ? `\n${entry.url}` : ""}`);
+  });
+  const footer = [
+    hidden && hidden.count > 0
+      ? `Leaving out ${hidden.count} you already marked ${hidden.label}.`
+      : "",
+    "Applied to or done with any? Reply with the numbers, like 1, 3.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  blocks.push(footer);
+  return packMessages(blocks, max).map((text) => ({ text, replyTo: null }));
+}
+
+export function allDoneReply(count: number, label: string): string {
+  return count === 1
+    ? `The one match is already marked ${label}.`
+    : `All ${count} matches are already marked ${label}. Ask for them "including ones I applied to" to see them.`;
+}
+
+export function markDoneReply(
+  label: string | null,
+  titles: string[],
+  problems: { badNumbers: number[]; unmatched: string[] },
+): string {
+  const lines: string[] = [];
+  if (titles.length > 0) {
+    lines.push(label ? `Marked ${label}:` : "Moved back to your lists:");
+    lines.push(...titles.map((title) => `- ${title}`));
+    if (label) lines.push("I'll leave them out of future lists.");
+  }
+  if (problems.badNumbers.length > 0) {
+    lines.push(`The last list didn't have ${problems.badNumbers.join(", ")}.`);
+  }
+  if (problems.unmatched.length > 0) {
+    lines.push(`I couldn't find ${problems.unmatched.join(", ")} in the last list. Ask for the list again and reply with numbers.`);
+  }
+  return clampReply(lines.join("\n") || NO_LIST_YET);
+}

@@ -177,7 +177,7 @@ export async function getSearchItems(ids: string[]): Promise<SearchItem[]> {
   if (ids.length === 0) return [];
   const { data, error } = await db()
     .from("items")
-    .select("id, title, summary, key_points, raw_text, url, item_type, wa_message_id")
+    .select("id, title, summary, key_points, raw_text, url, item_type, wa_message_id, done_at, done_label")
     .in("id", ids);
   if (error) throw new Error(`search item lookup failed: ${error.message}`);
   const byId = new Map((data as SearchItem[]).map((item) => [item.id, item]));
@@ -194,4 +194,42 @@ export async function recordResurfacing(itemIds: string[], trigger: string): Pro
   ]);
   if (opened.error) throw new Error(`last_opened_at update failed: ${opened.error.message}`);
   if (logged.error) throw new Error(`resurfacings insert failed: ${logged.error.message}`);
+}
+
+// ---------- lists and done ----------
+
+export type ChatState = { lastList: string[]; lastListAt: Date | null };
+
+export async function getChatState(phone: string): Promise<ChatState> {
+  const { data, error } = await db()
+    .from("chat_state")
+    .select("last_list, last_list_at")
+    .eq("user_phone", phone)
+    .maybeSingle();
+  if (error) throw new Error(`chat_state lookup failed: ${error.message}`);
+  return {
+    lastList: Array.isArray(data?.last_list) ? (data.last_list as string[]) : [],
+    lastListAt: data?.last_list_at ? new Date(data.last_list_at) : null,
+  };
+}
+
+export async function saveLastList(phone: string, itemIds: string[]): Promise<void> {
+  const now = new Date().toISOString();
+  const { error } = await db()
+    .from("chat_state")
+    .upsert({ user_phone: phone, last_list: itemIds, last_list_at: now, updated_at: now });
+  if (error) throw new Error(`chat_state save failed: ${error.message}`);
+}
+
+/** Marks items done with a label like "applied", or clears that with label null. */
+export async function setDone(phone: string, itemIds: string[], label: string | null): Promise<string[]> {
+  const { data, error } = await db()
+    .from("items")
+    .update(label ? { done_at: new Date().toISOString(), done_label: label } : { done_at: null, done_label: null })
+    .eq("user_phone", phone)
+    .in("id", itemIds)
+    .select("id, title");
+  if (error) throw new Error(`done update failed: ${error.message}`);
+  const titles = new Map((data ?? []).map((row) => [row.id as string, (row.title as string | null) ?? "Untitled"]));
+  return itemIds.flatMap((id) => titles.get(id) ?? []);
 }

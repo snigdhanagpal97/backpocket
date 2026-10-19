@@ -18,7 +18,7 @@ export const ANSWER_TOOL: Anthropic.Beta.BetaTool = {
     properties: {
       answer: {
         type: "string",
-        description: "The answer itself, under 450 characters, plain text. Empty if no item answers the question.",
+        description: "The answer itself, under 280 characters, plain text. Empty if no item answers the question.",
       },
       used_ids: {
         type: "array",
@@ -31,13 +31,18 @@ export const ANSWER_TOOL: Anthropic.Beta.BetaTool = {
 
 const SYSTEM_PROMPT = `Someone asked a question in WhatsApp about things they saved earlier: links, screenshots, posts, notes. You get the question and up to 5 saved items found by similarity search, with their content.
 
-Answer the question itself, from the items' content. Say what the content actually says: who said what, the steps, the numbers, the names. Bad: "A chat screenshot where Aditi gives growth case tips." Good: "Aditi said your framework is good. Her notes: keep the sheet neater, and write the key question at the top so you can keep tying back to it."
+Answer like a sharp friend who read their saves: the answer first, then only the details that matter.
+
+Bad: "Aditi said your framework is good. She has some tips for growth cases and wants to go over them quickly when you meet tomorrow. Her other notes: - Your sheet needs to be neater, but that will come with time..."
+Good: "Aditi liked the framework. Fixes: neater sheet, key question at the top so you can tie back to it. GBOT was solid."
 
 Rules:
+- Lead with the direct answer. No preamble, no restating the question, no "Her other notes", no sign-off.
+- Under 280 characters. At most 3 "- " bullets, only when listing distinct things.
+- Keep names, numbers, dates and pay. Cut filler and anything that doesn't answer the question.
 - Use only what the items say. Never invent or add outside knowledge.
 - Similar is not enough. Use an item only if it actually helps answer. If none do, return an empty answer and no ids.
-- Plain text for WhatsApp: no markdown, no headings. Short lines or "- " bullets are fine. Under 450 characters.
-- Speak to the person as "you". Don't mention items, ids, search or screenshots.
+- Plain text for WhatsApp, speaking to the person as "you". Don't mention items, ids, search or screenshots.
 
 Always answer by calling the answer_question tool.`;
 
@@ -85,8 +90,12 @@ async function answerFromItems(question: string, candidates: SearchItem[]): Prom
 }
 
 /** Answers a question from the user's saved items, as one or more WhatsApp messages. */
-export async function answerQuestion(phone: string, question: string): Promise<OutgoingMessage[]> {
-  const matches = await matchItems(phone, await embed(question), CANDIDATES);
+export async function answerQuestion(
+  phone: string,
+  searchText: string,
+  question = searchText,
+): Promise<OutgoingMessage[]> {
+  const matches = await matchItems(phone, await embed(searchText), CANDIDATES);
   const candidates = await getSearchItems(matches.map((match) => match.id));
   if (candidates.length === 0) return [{ text: NOTHING_FOUND, replyTo: null }];
 

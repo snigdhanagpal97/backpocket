@@ -127,6 +127,8 @@ export type SearchItem = {
   url: string | null;
   item_type: string | null;
   wa_message_id: string | null;
+  done_at: string | null;
+  done_label: string | null;
 };
 
 export const searchAnswerSchema = z.object({
@@ -135,3 +137,23 @@ export const searchAnswerSchema = z.object({
 });
 
 export type SearchAnswer = { answer: string; items: SearchItem[] };
+
+// Intent of a message with no link, decided by Claude.
+
+export const INTENT_KINDS = ["note", "question", "list", "mark_done", "unmark_done"] as const;
+
+export const intentSchema = z.object({
+  kind: z.enum(INTENT_KINDS),
+  search_text: z.string().trim(),
+  numbers: z.array(z.number().int().min(1)),
+  unmatched_names: z.array(z.string().trim().min(1)),
+  done_label: z.string().trim().toLowerCase().max(30),
+  include_done: z.boolean(),
+});
+
+export type Intent = z.infer<typeof intentSchema>;
+
+export const listSelectionSchema = z.object({
+  heading: z.string().trim().max(80),
+  ids: z.array(z.string().min(1)),
+});
