@@ -2,7 +2,7 @@
 
 Backpocket is a WhatsApp contact that people share links, screenshots and reels to. It turns every save into a structured card, stores it, and sends the right item back when it's needed: when the user asks, or in a 7am brief matched to their calendar.
 
-This is a portfolio project. Code quality, clear structure and honest handling of platform limits matter as much as features.
+Quality bar: clear structure, tested pure functions, and honest handling of platform limits matter as much as features.
 
 ## Stack
 

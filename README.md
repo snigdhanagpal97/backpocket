@@ -2,7 +2,33 @@
 
 Backpocket is a WhatsApp contact you share links, screenshots and reels to. It turns every save into a structured card (title, summary, key points, topics), stores it, and sends the right one back when you ask for it in the same chat.
 
-Weekend 1 covers save and find. A calendar-matched morning brief comes next.
+## Why I built it
+
+I save things by sending them to my own WhatsApp chat: LinkedIn posts before coffee chats, recipes, how-to reels, internship postings. I almost never open them again, and when I need one I can't find it. The problem isn't reading. It's timing: a saved post is useful on the morning of the chat it relates to, not the day I saved it.
+
+So Backpocket lives where the saving habit already is. You share to it like any contact, ask it questions in plain language, and tell it what you acted on ("applied to 1 and 3").
+
+## What works today
+
+- **Save:** links (LinkedIn, recipe sites, articles), screenshots and plain notes become searchable cards.
+- **Find:** "what did Aditi say about growth cases?" gets a short answer that quotes the original message you saved.
+- **Lists:** "share all summer 2027 internship links" returns a numbered list; reply with numbers to mark them applied, cooked or read, and they drop out of future lists.
+
+Not built yet: the calendar-matched morning brief (in progress) and Notability notes.
+
+## Product decisions
+
+| Decision | Alternative I rejected | Why |
+| --- | --- | --- |
+| WhatsApp as the only interface | Telegram bot, web app | It's where I already save things. Telegram was an hour less setup but a habit I don't have. |
+| Ask for a screenshot when LinkedIn or Instagram hides a post | Scraping behind logins, downloading reels | Scraping breaks the platforms' terms and fails silently. A screenshot works every time and the user knows why it's asked. |
+| Claude decides what a link-free message means, with a keyword check as backup | Keyword rules only | "Done with Nordstrom" or just "2" only makes sense next to the last list sent, which keyword rules can't see. The backup keeps the bot answering when the model call fails. |
+| Answers capped near 200 characters | Full summaries | Early answers restated everything in the saved item. A reply should read like a friend who read it for you. |
+| Strip tracking parameters before saving links | Store links as shared | The same LinkedIn post shared twice had different URLs, so duplicates slipped through. |
+
+## How I built it
+
+I wrote the spec and the rules in [CLAUDE.md](CLAUDE.md) and built with Claude Code. Every change after the first version came from using it on my own saves: two screenshots racing for one link, LinkedIn previews cutting posts short, answers running too long. The commit history shows that trail.
 
 ## Architecture
 
