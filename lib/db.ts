@@ -138,6 +138,28 @@ export async function findPendingFallback(phone: string, since: Date): Promise<I
   return latest?.status === "needs_fallback" ? latest : null;
 }
 
+/**
+ * Atomically claims a needs_fallback item for one screenshot, so two
+ * screenshots arriving together can't both attach to (and overwrite) it.
+ * Returns false if another message already claimed it.
+ */
+export async function claimFallback(id: string): Promise<boolean> {
+  const { data, error } = await db()
+    .from("items")
+    .update({ status: "attaching" })
+    .eq("id", id)
+    .eq("status", "needs_fallback")
+    .select("id");
+  if (error) throw new Error(`fallback claim for ${id} failed: ${error.message}`);
+  return (data ?? []).length > 0;
+}
+
+/** Puts a claimed item back so a later screenshot can still complete it. */
+export async function releaseFallback(id: string): Promise<void> {
+  const { error } = await db().from("items").update({ status: "needs_fallback" }).eq("id", id).eq("status", "attaching");
+  if (error) console.error("[db] fallback release failed", { id, error: error.message });
+}
+
 // ---------- search ----------
 
 export async function matchItems(phone: string, embedding: number[], count: number): Promise<MatchedItem[]> {

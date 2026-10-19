@@ -1,9 +1,11 @@
 import { buildCard } from "@/lib/card";
 import {
+  claimFallback,
   findPendingFallback,
   findSameContent,
   insertItem,
   messageAlreadySaved,
+  releaseFallback,
   updateItem,
   type ItemRow,
 } from "@/lib/db";
@@ -43,7 +45,8 @@ export async function handleMessage(message: WhatsAppMessage): Promise<void> {
 
     if (extracted.source === "screenshot") {
       const pending = await findPendingFallback(phone, new Date(Date.now() - FALLBACK_WINDOW_MS));
-      if (pending) {
+      // If another screenshot claimed the link first, save this one on its own.
+      if (pending && (await claimFallback(pending.id))) {
         await attachScreenshot(pending, extracted);
         return;
       }
@@ -125,12 +128,18 @@ async function attachScreenshot(pending: ItemRow, screenshot: ExtractedContent):
       .join("\n\n"),
     status: "complete",
   };
-  const card = await buildCard(combined);
-  await updateItem(pending.id, {
-    ...(await cardFields(card)),
-    raw_text: combined.rawText,
-    image_path: screenshot.imagePath ?? null,
-    status: "complete",
-  });
+  let card: Card;
+  try {
+    card = await buildCard(combined);
+    await updateItem(pending.id, {
+      ...(await cardFields(card)),
+      raw_text: combined.rawText,
+      image_path: screenshot.imagePath ?? null,
+      status: "complete",
+    });
+  } catch (error) {
+    await releaseFallback(pending.id);
+    throw error;
+  }
   await sendText(pending.user_phone, savedReply(card));
 }

@@ -42,3 +42,5 @@ npm run simulate -- --text "hello" https://your-app.vercel.app/api/whatsapp
 ```
 
 The URL defaults to `http://localhost:3000/api/whatsapp`. The sender is the first number in `ALLOWED_PHONES`.
+
+Against a server with a real `WHATSAPP_TOKEN` (including the deployed app), every simulated message gets a real WhatsApp reply on that phone, and test items mix with real ones. To test without sending anything, run the local server with a fake token: `WHATSAPP_TOKEN=fake npm run dev`.
