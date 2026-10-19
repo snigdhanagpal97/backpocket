@@ -52,3 +52,30 @@ export function messagesFromWebhook(payload: WhatsAppWebhook): WhatsAppMessage[]
     entry.changes.flatMap((change) => change.value.messages ?? []),
   );
 }
+
+// Extraction output, shared by extract, card building and storage.
+
+export type Source =
+  | "screenshot"
+  | "linkedin"
+  | "instagram"
+  | "recipe_web"
+  | "web"
+  | "query"
+  | "note";
+
+export type ExtractStatus = "complete" | "needs_fallback";
+
+export type ExtractedContent = {
+  source: Source;
+  url: string | null;
+  /** Everything we could read, labeled, for the card builder. */
+  rawText: string;
+  /** Text the user typed alongside a link, or an image caption. */
+  userNote: string | null;
+  imageBase64?: string;
+  mimeType?: string;
+  /** Path inside the screenshots bucket. */
+  imagePath?: string;
+  status: ExtractStatus;
+};
