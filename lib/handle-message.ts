@@ -1,15 +1,79 @@
+import { buildCard } from "@/lib/card";
+import {
+  findPendingFallback,
+  findSameContent,
+  insertItem,
+  messageAlreadySaved,
+  updateItem,
+  type ItemRow,
+} from "@/lib/db";
+import { cardEmbeddingText, embed } from "@/lib/embed";
 import { extractContent, UnsupportedMessageError } from "@/lib/extract";
-import type { WhatsAppMessage } from "@/lib/types";
+import { alreadySavedReply, fallbackReply, SAVE_FAILED, savedReply, UNSUPPORTED } from "@/lib/replies";
+import type { Card, ExtractedContent, Source, WhatsAppMessage } from "@/lib/types";
 import { sendText } from "@/lib/whatsapp";
 
+const FALLBACK_WINDOW_MS = 10 * 60 * 1000;
+
 export async function handleMessage(message: WhatsAppMessage): Promise<void> {
+  const phone = message.from;
   try {
+    // Meta retries webhooks; the same message id must never be saved twice.
+    if (await messageAlreadySaved(message.id, `${phone}/${message.id}`)) {
+      console.info("[handle-message] skipping already saved message", { messageId: message.id });
+      return;
+    }
+
     const extracted = await extractContent(message);
-    // Temporary until Phase 4 builds cards: show what extraction found.
-    await sendText(message.from, `Got it · ${extracted.source} · ${extracted.status}`);
+
+    if (extracted.source === "query") {
+      await sendText(phone, "Search is coming soon. For now I can save things.");
+      return;
+    }
+
+    if (extracted.source === "screenshot") {
+      const pending = await findPendingFallback(phone, new Date(Date.now() - FALLBACK_WINDOW_MS));
+      if (pending) {
+        await attachScreenshot(pending, extracted);
+        return;
+      }
+    }
+
+    const duplicate = await findDuplicate(phone, extracted);
+    if (duplicate) {
+      await sendText(phone, alreadySavedReply(duplicate.title));
+      return;
+    }
+
+    if (extracted.status === "needs_fallback") {
+      const saved = await insertItem({
+        user_phone: phone,
+        source: extracted.source,
+        url: extracted.url,
+        raw_text: extracted.rawText,
+        status: "needs_fallback",
+        wa_message_id: message.id,
+      });
+      if (saved) await sendText(phone, fallbackReply(extracted.source));
+      return;
+    }
+
+    const card = await buildCard(extracted);
+    const saved = await insertItem({
+      ...(await cardFields(card)),
+      user_phone: phone,
+      source: extracted.source,
+      url: extracted.url,
+      raw_text: extracted.rawText,
+      image_path: extracted.imagePath ?? null,
+      status: "complete",
+      wa_message_id: message.id,
+    });
+    // null means a retried webhook beat us to the insert; it already replied.
+    if (saved) await sendText(phone, savedReply(card));
   } catch (error) {
     if (error instanceof UnsupportedMessageError) {
-      await sendText(message.from, "I can save links, screenshots and text for now.");
+      await sendText(phone, UNSUPPORTED);
       return;
     }
     console.error("[handle-message] failed", {
@@ -17,6 +81,45 @@ export async function handleMessage(message: WhatsAppMessage): Promise<void> {
       type: message.type,
       error: error instanceof Error ? error.message : error,
     });
-    await sendText(message.from, "Couldn't save that one, try again?");
+    await sendText(phone, SAVE_FAILED);
   }
+}
+
+async function cardFields(card: Card) {
+  return {
+    item_type: card.item_type,
+    title: card.title,
+    summary: card.summary,
+    key_points: card.key_points,
+    entities: card.entities,
+    topics: card.topics,
+    embedding: await embed(cardEmbeddingText(card)),
+  };
+}
+
+function findDuplicate(phone: string, extracted: ExtractedContent): Promise<ItemRow | null> {
+  if (extracted.url) return findSameContent(phone, { url: extracted.url });
+  if (extracted.source === "note") return findSameContent(phone, { note: extracted.rawText });
+  return Promise.resolve(null);
+}
+
+/** Completes a walled link with the screenshot the user sent for it. */
+async function attachScreenshot(pending: ItemRow, screenshot: ExtractedContent): Promise<void> {
+  const combined: ExtractedContent = {
+    ...screenshot,
+    source: pending.source as Source,
+    url: pending.url,
+    rawText: [pending.raw_text, screenshot.userNote ? `Screenshot caption: ${screenshot.userNote}` : ""]
+      .filter(Boolean)
+      .join("\n\n"),
+    status: "complete",
+  };
+  const card = await buildCard(combined);
+  await updateItem(pending.id, {
+    ...(await cardFields(card)),
+    raw_text: combined.rawText,
+    image_path: screenshot.imagePath ?? null,
+    status: "complete",
+  });
+  await sendText(pending.user_phone, savedReply(card));
 }

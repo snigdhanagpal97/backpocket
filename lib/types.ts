@@ -79,3 +79,27 @@ export type ExtractedContent = {
   imagePath?: string;
   status: ExtractStatus;
 };
+
+// Card built by Claude from extracted content. Constraints are enforced here,
+// because strict tool schemas can't express string lengths.
+
+export const ITEM_TYPES = ["recipe", "post", "how_to", "note", "other"] as const;
+
+const topic = z
+  .string()
+  .transform((value) => value.trim().toLowerCase().replace(/^#+/, "").replace(/\s+/g, "-"))
+  .pipe(z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "topics are single lowercase words or hyphenated"));
+
+export const cardSchema = z.object({
+  item_type: z.enum(ITEM_TYPES),
+  title: z.string().trim().min(1).max(60),
+  summary: z.string().trim().min(1).max(400),
+  key_points: z.array(z.string().trim().min(1)).max(8),
+  entities: z.object({
+    people: z.array(z.string().trim().min(1)),
+    companies: z.array(z.string().trim().min(1)),
+  }),
+  topics: z.array(topic).min(2).max(5),
+});
+
+export type Card = z.infer<typeof cardSchema>;
