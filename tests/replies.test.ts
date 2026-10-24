@@ -1,17 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { alreadySavedReply, clampReply, fallbackReply, SAVED_REPLIES, savedReply, searchMessages } from "@/lib/replies";
+import { alreadySavedReply, clampReply, fallbackReply, savedReply, searchMessages } from "@/lib/replies";
 
 describe("savedReply", () => {
-  it("is a short warm line, not the card details", () => {
-    const reply = savedReply({ title: "Palak paneer" });
-    expect(SAVED_REPLIES).toContain(reply);
-    expect(reply).not.toContain("Palak");
-  });
-
-  it("is the same for the same title and varies across titles", () => {
-    expect(savedReply({ title: "A" })).toBe(savedReply({ title: "A" }));
-    const replies = new Set(["A", "B", "C", "D", "E", "F", "G", "H"].map((title) => savedReply({ title })));
-    expect(replies.size).toBeGreaterThan(1);
+  it("is a tick and the title", () => {
+    expect(savedReply({ title: "Nordstrom Summer 2027 internships: 7 paid roles open" })).toBe(
+      "✅ Nordstrom Summer 2027 internships: 7 paid roles open",
+    );
   });
 });
 
@@ -29,8 +23,9 @@ describe("fallbackReply", () => {
 });
 
 describe("alreadySavedReply", () => {
-  it("is warm and short", () => {
-    expect(alreadySavedReply()).toBe("Already have that one 🙂");
+  it("names what was already saved", () => {
+    expect(alreadySavedReply("Palak paneer")).toBe("👍 Already saved: Palak paneer");
+    expect(alreadySavedReply(null)).toBe("👍 Already saved that one");
   });
 });
 

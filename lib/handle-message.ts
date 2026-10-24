@@ -85,7 +85,7 @@ export async function handleMessage(message: WhatsAppMessage): Promise<void> {
 
     const duplicate = await findDuplicate(phone, extracted);
     if (duplicate) {
-      await sendText(phone, alreadySavedReply());
+      await sendText(phone, alreadySavedReply(duplicate.title));
       return;
     }
 
