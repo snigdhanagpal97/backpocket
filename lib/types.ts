@@ -85,6 +85,14 @@ export type ExtractedContent = {
 // Card built by Claude from extracted content. Constraints are enforced here,
 // because strict tool schemas can't express string lengths.
 
+/** Cuts text to `max` characters at a word boundary, ending with an ellipsis. */
+export function shortenTitle(value: string, max: number): string {
+  if (value.length <= max) return value;
+  const cut = value.slice(0, max - 1);
+  const atWord = cut.lastIndexOf(" ") > max / 2 ? cut.slice(0, cut.lastIndexOf(" ")) : cut;
+  return `${atWord.replace(/[\s,;:–-]+$/, "")}…`;
+}
+
 export const ITEM_TYPES = ["recipe", "post", "how_to", "job", "note", "other"] as const;
 
 const topic = z
@@ -94,7 +102,8 @@ const topic = z
 
 export const cardSchema = z.object({
   item_type: z.enum(ITEM_TYPES),
-  title: z.string().trim().min(1).max(60),
+  // Long job titles are common; shorten them at a word boundary instead of failing the save.
+  title: z.string().trim().min(1).transform((value) => shortenTitle(value, 60)),
   summary: z.string().trim().min(1).max(400),
   key_points: z.array(z.string().trim().min(1)).max(8),
   entities: z.object({

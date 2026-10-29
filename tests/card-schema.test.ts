@@ -24,7 +24,6 @@ describe("cardSchema", () => {
   });
 
   it.each([
-    ["a title over 60 characters", { title: "x".repeat(61) }],
     ["more than 8 key points", { key_points: Array(9).fill("step") }],
     ["fewer than 2 topics", { topics: ["paneer"] }],
     ["more than 5 topics", { topics: ["a", "b", "c", "d", "e", "f"] }],
@@ -33,6 +32,21 @@ describe("cardSchema", () => {
     ["a deadline that is not a date", { job: { company: "Stripe", role: "PM Intern", deadline: "Nov 1" } }],
   ])("rejects %s", (_, change) => {
     expect(cardSchema.safeParse({ ...valid, ...change }).success).toBe(false);
+  });
+});
+
+describe("long titles", () => {
+  it("are shortened at a word boundary instead of failing", () => {
+    const card = cardSchema.parse({
+      ...valid,
+      title: "Intern – Digital Healthtech Product Management – Bothell, WA – Summer 2027 at Philips",
+    });
+    expect(card.title.length).toBeLessThanOrEqual(60);
+    expect(card.title).toBe("Intern – Digital Healthtech Product Management – Bothell…");
+  });
+
+  it("leave short titles alone", () => {
+    expect(cardSchema.parse({ ...valid, title: "Palak paneer" }).title).toBe("Palak paneer");
   });
 });
 

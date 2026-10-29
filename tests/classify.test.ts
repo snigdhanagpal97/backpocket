@@ -75,6 +75,7 @@ describe("cleanUrl", () => {
         "https://www.linkedin.com/posts/someone_topic-activity-7515954543143059456-FKDJ?utm_medium=ios_app&rcm=ACoAAabc&utm_source=social_share&utm_campaign=copy_link",
       ),
     ).toBe("https://www.linkedin.com/posts/someone_topic-activity-7515954543143059456-FKDJ");
+    expect(cleanUrl("https://www.instagram.com/reel/Desvx0yMb-A/?xtok=Z204aW")).toBe("https://www.instagram.com/reel/Desvx0yMb-A/");
     expect(cleanUrl("https://www.instagram.com/reel/Dep9jgqxRXP/?mdxt=MTU3Ng==&igsh=abc")).toBe(
       "https://www.instagram.com/reel/Dep9jgqxRXP/",
     );

@@ -13,6 +13,7 @@ import {
 } from "@/lib/db";
 import { cardEmbeddingText, embed } from "@/lib/embed";
 import { extractContent, UnsupportedMessageError } from "@/lib/extract";
+import { screenshotMatchesLink } from "@/lib/fallback-match";
 import {
   alreadySavedReply,
   fallbackReply,
@@ -78,8 +79,18 @@ export async function handleMessage(message: WhatsAppMessage): Promise<void> {
       const pending = await findPendingFallback(phone, new Date(Date.now() - FALLBACK_WINDOW_MS));
       // If another screenshot claimed the link first, save this one on its own.
       if (pending && (await claimFallback(pending.id))) {
-        await attachScreenshot(pending, extracted);
-        return;
+        // Only attach a screenshot that shows the link; a batch of saves can put an unrelated image here.
+        const matches = await screenshotMatchesLink({
+          url: pending.url,
+          linkText: pending.raw_text,
+          imageBase64: extracted.imageBase64 ?? "",
+          mimeType: extracted.mimeType ?? "image/jpeg",
+        });
+        if (matches) {
+          await attachScreenshot(pending, extracted);
+          return;
+        }
+        await releaseFallback(pending.id);
       }
     }
 

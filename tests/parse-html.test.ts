@@ -130,3 +130,13 @@ describe("LinkedIn public post", () => {
     expect(text).not.toContain("Description:");
   });
 });
+
+describe("LinkedIn job page", () => {
+  const page = parsePage(fixture("linkedin-job.html"), "https://www.linkedin.com/jobs/view/1/");
+
+  it("reads the full job description, not the generic summary", () => {
+    expect(page.postText).toContain("Own one experiment end to end");
+    expect(page.postText).toContain("Applications close November 15, 2026");
+    expect(pageToText(page, { includeBody: false })).not.toContain("See responsibilities, qualifications");
+  });
+});

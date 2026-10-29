@@ -154,8 +154,10 @@ export function looksLikeLoginWall(input: {
 function readLinkedInPostText($: cheerio.CheerioAPI): string | null {
   // The post itself, on both the public post page and the embed page. Comments share the class but not the test id.
   const post = $('[data-test-id^="main-feed-activity-"][data-test-id$="__commentary"]').first();
+  // Public job pages keep the full description in this block.
+  const job = post.length ? post : $(".show-more-less-html__markup, .description__text").first();
   // LinkedIn double-encodes ampersands, so one decode leaves "amp;" behind.
-  const text = post.length ? post.text().replace(/&amp;|\bamp;/g, "&") : "";
+  const text = job.length ? job.text().replace(/&amp;|\bamp;/g, "&") : "";
   return orNull(text.replace(/[ \t]+/g, " ").replace(/\n\s*\n\s*/g, "\n\n").trim());
 }
 
