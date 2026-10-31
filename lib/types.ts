@@ -166,6 +166,8 @@ export const intentSchema = z.object({
   numbers: z.array(z.number().int().min(1)),
   unmatched_names: z.array(z.string().trim().min(1)),
   done_label: z.string().trim().toLowerCase().max(30),
+  /** Other actions in the same message: "1 skip, 3 applied" has two. */
+  also_done: z.array(z.object({ number: z.number().int().min(1), label: z.string().trim().toLowerCase().min(1).max(30) })),
   include_done: z.boolean(),
 });
 

@@ -102,16 +102,37 @@ export async function recentListTitles(phone: string): Promise<{ ids: string[]; 
   return { ids: items.map((item) => item.id), titles: items.map((item) => item.title ?? "Untitled") };
 }
 
+/** Splits a message into one group per action: "1 skip, 3 applied" is two groups. */
+export function markGroups(intent: Intent): { label: string | null; numbers: number[] }[] {
+  const label = intent.kind === "mark_done" ? intent.done_label || "done" : null;
+  const groups = new Map<string | null, Set<number>>();
+  // A number with its own action in also_done doesn't belong to the main action too.
+  const others = new Set(intent.also_done.filter((done) => done.label !== label).map((done) => done.number));
+  const main = intent.numbers.filter((n) => !others.has(n));
+  if (main.length > 0) groups.set(label, new Set(main));
+  for (const { number, label: other } of intent.also_done) {
+    if (!groups.has(other)) groups.set(other, new Set());
+    groups.get(other)!.add(number);
+  }
+  return [...groups].map(([groupLabel, numbers]) => ({ label: groupLabel, numbers: [...numbers] }));
+}
+
 export async function markFromList(
   phone: string,
   intent: Intent,
   lastList: { ids: string[] },
 ): Promise<string> {
   if (lastList.ids.length === 0) return NO_LIST_YET;
-  const numbers = [...new Set(intent.numbers)];
-  const badNumbers = numbers.filter((n) => n > lastList.ids.length);
-  const ids = numbers.filter((n) => n <= lastList.ids.length).map((n) => lastList.ids[n - 1]);
-  const label = intent.kind === "mark_done" ? intent.done_label || "done" : null;
-  const titles = ids.length > 0 ? await setDone(phone, ids, label) : [];
-  return markDoneReply(label, titles, { badNumbers, unmatched: intent.unmatched_names });
+  const replies: string[] = [];
+  const badNumbers: number[] = [];
+  for (const { label, numbers } of markGroups(intent)) {
+    badNumbers.push(...numbers.filter((n) => n > lastList.ids.length));
+    const ids = numbers.filter((n) => n <= lastList.ids.length).map((n) => lastList.ids[n - 1]);
+    const titles = ids.length > 0 ? await setDone(phone, ids, label) : [];
+    if (titles.length > 0) replies.push(markDoneReply(label, titles, { badNumbers: [], unmatched: [] }));
+  }
+  if (badNumbers.length > 0 || intent.unmatched_names.length > 0 || replies.length === 0) {
+    replies.push(markDoneReply(null, [], { badNumbers, unmatched: intent.unmatched_names }));
+  }
+  return replies.join("\n\n");
 }

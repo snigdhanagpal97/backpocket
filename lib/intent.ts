@@ -9,7 +9,7 @@ export const ROUTE_TOOL: Anthropic.Beta.BetaTool = {
   input_schema: {
     type: "object",
     additionalProperties: false,
-    required: ["kind", "search_text", "numbers", "unmatched_names", "done_label", "include_done"],
+    required: ["kind", "search_text", "numbers", "unmatched_names", "done_label", "also_done", "include_done"],
     properties: {
       kind: { type: "string", enum: [...INTENT_KINDS] },
       search_text: {
@@ -29,6 +29,16 @@ export const ROUTE_TOOL: Anthropic.Beta.BetaTool = {
       done_label: {
         type: "string",
         description: 'For mark_done: one or two lowercase past-tense words for what they did, like "applied", "cooked", "read". Otherwise empty.',
+      },
+      also_done: {
+        type: "array",
+        description: 'For mark_done, when one message has different actions: every item with a different action from done_label. "1 skip, 3 applied" is numbers [1], done_label "skipped", also_done [{number: 3, label: "applied"}]. Otherwise empty.',
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["number", "label"],
+          properties: { number: { type: "integer" }, label: { type: "string" } },
+        },
       },
       include_done: {
         type: "boolean",
@@ -79,6 +89,7 @@ export async function routeMessage(text: string, lastListTitles: string[]): Prom
     numbers: [],
     unmatched_names: [],
     done_label: "",
+    also_done: [],
     include_done: false,
   };
 }
