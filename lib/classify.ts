@@ -75,6 +75,11 @@ export function linkedInEmbedUrl(url: string): string | null {
 }
 
 /** A short reply with no link, like "hi" or "show me", that carries nothing to save. */
+/** True for a message with no words, like "??" or "...". */
+export function isOnlyPunctuation(text: string): boolean {
+  return text.trim().length > 0 && !/[\p{L}\p{N}]/u.test(text);
+}
+
 export function isBareReply(text: string): boolean {
   const trimmed = text.trim();
   return trimmed.length <= 25 && !URL_PATTERN.test(trimmed);

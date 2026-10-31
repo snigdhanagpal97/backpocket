@@ -122,6 +122,18 @@ export async function findSameContent(
   return data as ItemRow | null;
 }
 
+/** The item saved from a given WhatsApp message, if any. */
+export async function findItemByMessage(phone: string, waMessageId: string): Promise<ItemRow | null> {
+  const { data, error } = await db()
+    .from("items")
+    .select(ITEM_COLUMNS)
+    .eq("user_phone", phone)
+    .eq("wa_message_id", waMessageId)
+    .maybeSingle();
+  if (error) throw new Error(`item lookup failed: ${error.message}`);
+  return data as ItemRow | null;
+}
+
 /**
  * The walled link a screenshot should complete: this user's most recent item,
  * if it was created after `since` and is still needs_fallback. Anything saved

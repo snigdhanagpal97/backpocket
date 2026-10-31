@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyUrl, cleanUrl, findUrl, isQuestion, linkedInEmbedUrl, splitLinkAndNote } from "@/lib/classify";
+import { classifyUrl, cleanUrl, findUrl, isOnlyPunctuation, isQuestion, linkedInEmbedUrl, splitLinkAndNote } from "@/lib/classify";
 
 describe("findUrl", () => {
   it("finds an https link inside text", () => {
@@ -66,6 +66,16 @@ describe("isQuestion", () => {
       expect(isQuestion(text)).toBe(false);
     },
   );
+});
+
+describe("isOnlyPunctuation", () => {
+  it.each(["??", "...", " ?! ", "👀"])("%j has no words", (text) => {
+    expect(isOnlyPunctuation(text)).toBe(true);
+  });
+
+  it.each(["2", "ok", "what?", ""])("%j does not count", (text) => {
+    expect(isOnlyPunctuation(text)).toBe(false);
+  });
 });
 
 describe("cleanUrl", () => {

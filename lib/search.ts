@@ -42,6 +42,7 @@ Rules:
 - Drop context the person already knows (when they meet, what the chat was about). Keep the substance.
 - Keep names, numbers, dates and pay. Cut filler and anything that doesn't answer the question.
 - Use only what the items say. Never invent or add outside knowledge.
+- Some saved links have only the person's note, because the site hid the content. If the note fits what they're asking for, that item is the answer: say it's the one they saved, and don't guess what's inside it. The link is added to your reply automatically, so never write a URL yourself.
 - Similar is not enough. Use an item only if it actually helps answer. If none do, return an empty answer and no ids.
 - Plain text for WhatsApp, speaking to the person as "you". Don't mention items, ids, search or screenshots.
 

@@ -1,6 +1,6 @@
 // Every WhatsApp reply Backpocket sends, as pure functions.
 
-import type { Card, Source } from "@/lib/types";
+import { shortenTitle, type Card, type Source } from "@/lib/types";
 
 export const MAX_REPLY_CHARS = 700;
 
@@ -21,10 +21,31 @@ const PLATFORM_NAMES: Partial<Record<Source, string>> = {
   instagram: "Instagram",
 };
 
-export function fallbackReply(source: Source): string {
+export function fallbackReply(source: Source, note: string | null = null): string {
   const platform = PLATFORM_NAMES[source];
   const who = platform ? `${platform} hid the content` : "I couldn't read that page";
+  if (note) {
+    return `Saved the link as "${clampReply(note, 60)}", but ${who}. Ask for it anytime, or send a screenshot in the next 10 minutes so I can read it.`;
+  }
   return `Saved the link, but ${who}. Send a screenshot in the next 10 minutes and I'll attach it.`;
+}
+
+/** What a hidden link is saved as, so it can still be found by what the user wrote. */
+export function walledLinkCard(source: Source, note: string): { title: string; summary: string; embedText: string } {
+  const platform = PLATFORM_NAMES[source] ?? "Web";
+  return {
+    title: shortenTitle(note, 60),
+    summary: `${platform} link saved with the note: ${note}. The page's content was hidden.`,
+    embedText: `${note}\n${platform} link`,
+  };
+}
+
+export const NOT_SURE = "Not sure what you mean. Ask me about something you saved.";
+
+/** The reply to someone quoting a saved item with no words, like "??". */
+export function quotedItemReply(item: { title: string | null; summary: string | null; url: string | null }): string {
+  const lines = [item.title ?? "Saved item", item.summary ?? "", item.url ?? ""].filter(Boolean);
+  return clampReply(lines.join("\n\n"));
 }
 
 /** Trims a reply to WhatsApp-friendly length without cutting mid-word. */

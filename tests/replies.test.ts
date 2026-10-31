@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alreadySavedReply, clampReply, fallbackReply, savedReply, searchMessages } from "@/lib/replies";
+import { alreadySavedReply, clampReply, fallbackReply, quotedItemReply, savedReply, searchMessages, walledLinkCard } from "@/lib/replies";
 
 describe("savedReply", () => {
   it("is a tick and the title", () => {
@@ -74,5 +74,34 @@ describe("searchMessages", () => {
     const [first] = searchMessages("word ".repeat(300), [item(1, url)]);
     expect(first.text.length).toBeLessThanOrEqual(700);
     expect(first.text.endsWith(url)).toBe(true);
+  });
+});
+
+describe("walled links with a note", () => {
+  it("are saved under the note so search can find them", () => {
+    const card = walledLinkCard("instagram", "Bain cover letter tips");
+    expect(card.title).toBe("Bain cover letter tips");
+    expect(card.embedText).toContain("Bain cover letter tips");
+    expect(card.summary).toContain("Instagram link");
+  });
+
+  it("tell the user it's findable", () => {
+    expect(fallbackReply("instagram", "Bain cover letter tips")).toBe(
+      'Saved the link as "Bain cover letter tips", but Instagram hid the content. Ask for it anytime, or send a screenshot in the next 10 minutes so I can read it.',
+    );
+  });
+});
+
+describe("quotedItemReply", () => {
+  it("gives back the title, summary and link", () => {
+    expect(quotedItemReply({ title: "Bain tips", summary: "A saved reel.", url: "https://example.com/r" })).toBe(
+      "Bain tips\n\nA saved reel.\n\nhttps://example.com/r",
+    );
+  });
+
+  it("works for an item with no card yet", () => {
+    expect(quotedItemReply({ title: null, summary: null, url: "https://example.com/r" })).toBe(
+      "Saved item\n\nhttps://example.com/r",
+    );
   });
 });

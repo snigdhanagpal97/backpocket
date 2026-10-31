@@ -9,6 +9,8 @@ export const whatsappMessageSchema = z.object({
   timestamp: z.string(),
   type: z.string(),
   text: z.object({ body: z.string() }).optional(),
+  // Set when the message is a reply to an earlier one.
+  context: z.object({ id: z.string().optional() }).optional(),
   // Tapping a quick-reply button on a template message.
   button: z.object({ text: z.string(), payload: z.string().optional() }).optional(),
   image: z

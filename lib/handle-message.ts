@@ -1,8 +1,9 @@
 import { deliverPendingBrief } from "@/lib/brief";
 import { buildCard } from "@/lib/card";
-import { isBareReply } from "@/lib/classify";
+import { isBareReply, isOnlyPunctuation } from "@/lib/classify";
 import {
   claimFallback,
+  findItemByMessage,
   findPendingFallback,
   findSameContent,
   insertItem,
@@ -17,11 +18,14 @@ import { screenshotMatchesLink } from "@/lib/fallback-match";
 import {
   alreadySavedReply,
   fallbackReply,
+  NOT_SURE,
+  quotedItemReply,
   NO_PENDING_BRIEF,
   SAVE_FAILED,
   savedReply,
   SEARCH_FAILED,
   UNSUPPORTED,
+  walledLinkCard,
 } from "@/lib/replies";
 import { routeMessage } from "@/lib/intent";
 import { listSaved, markFromList, recentListTitles } from "@/lib/list";
@@ -54,6 +58,14 @@ export async function handleMessage(message: WhatsAppMessage): Promise<void> {
     if (briefDelivered && message.type === "text" && isBareReply(message.text?.body ?? "")) return;
 
     let extracted = await extractContent(message);
+
+    // "??" isn't a note. Quoting a saved item this way asks for it back.
+    if (message.type === "text" && isOnlyPunctuation(extracted.rawText)) {
+      const quoted = message.context?.id ? await findItemByMessage(phone, message.context.id) : null;
+      if (quoted) await sendText(phone, quotedItemReply(quoted), { replyTo: quoted.wa_message_id });
+      else await sendText(phone, NOT_SURE);
+      return;
+    }
 
     // Text without a link: Claude decides whether it's a note, a question, a list request or "I applied to 2".
     if (extracted.source === "note" || extracted.source === "query") {
@@ -101,15 +113,20 @@ export async function handleMessage(message: WhatsAppMessage): Promise<void> {
     }
 
     if (extracted.status === "needs_fallback") {
+      // The content is hidden, but the user's note still makes the link findable.
+      const fromNote = extracted.userNote ? walledLinkCard(extracted.source, extracted.userNote) : null;
       const saved = await insertItem({
         user_phone: phone,
         source: extracted.source,
         url: extracted.url,
         raw_text: extracted.rawText,
+        title: fromNote?.title ?? null,
+        summary: fromNote?.summary ?? null,
+        embedding: fromNote ? await embed(fromNote.embedText) : null,
         status: "needs_fallback",
         wa_message_id: message.id,
       });
-      if (saved) await sendText(phone, fallbackReply(extracted.source));
+      if (saved) await sendText(phone, fallbackReply(extracted.source, extracted.userNote));
       return;
     }
 
